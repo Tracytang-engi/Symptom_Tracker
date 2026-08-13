@@ -78,10 +78,34 @@ void BLE_sendEventEnd(const PressEvent* event);
 /**
  * BLE_sendSos()
  * 发送 SOS 紧急求助事件给手机 App。
- * 通过事件特征发送 JSON：{"type":"sos","ts":millis()}
- * 同时打印 Serial 提示。
  */
 void BLE_sendSos();
+
+/**
+ * BLE_sendRecordingDone(filePath, durationMs, fileSize)
+ * 录音完成后通知手机 App，携带文件路径和大小信息。
+ * App 收到后可以发起文件传输请求。
+ */
+void BLE_sendRecordingDone(const char* filePath, uint32_t durationMs, size_t fileSize);
+
+/**
+ * BLE_notifyJson(json)
+ * 向事件特征推送任意 JSON（需已连接）。
+ */
+void BLE_notifyJson(const char* json);
+
+/** 是否正在 BLE 文件分块传输（同步应让路） */
+bool BLE_isFileXferActive();
+
+/**
+ * BLE_getRecordCmd()
+ * 返回 App 最近通过 BLE 发来的录音指令：
+ *   0 = 无新指令
+ *   1 = 开始录音
+ *   2 = 停止录音
+ * 读取后自动清零（一次性消费）。
+ */
+uint8_t BLE_getRecordCmd();
 
 // ─── App → ESP32 设置写回接口 ─────────────────────────────────────────────────
 //

@@ -1,9 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';  // Riverpod = Flutter 状态管理库
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_settings.dart';
 import '../models/device_settings.dart';
 import '../models/tag.dart';
 import '../models/symptom_profile.dart';
 import '../services/storage_service.dart';
+import '../theme/app_theme.dart';
 
 // ─── 全局存储服务 ─────────────────────────────────────────────────────────────
 
@@ -28,9 +29,32 @@ class UserSettingsNotifier extends StateNotifier<UserSettings> {
 
   // patch = 只修改部分字段的便捷方法（不需要传完整对象）
   Future<void> patch(UserSettings Function(UserSettings) updater) async {
-    // Function(UserSettings) = 接受 UserSettings 并返回 UserSettings 的函数类型
-    final next = updater(state);  // 用当前 state 调用修改函数，得到新状态
+    final next = updater(state);
     await update(next);
+  }
+
+  /// 进入 / 退出 Accessible Mode（带字号与大按钮快照，持久化）
+  Future<void> setAccessibleMode(bool on) async {
+    if (on) {
+      if (state.accessibleMode) return;
+      await update(state.copyWith(
+        accessibleMode: true,
+        preAccessibleFontSize: state.fontSize.index,
+        preAccessibleLargeButtons: state.largeButtons,
+        largeButtons: true,
+        fontSize: AppFontSize.large,
+      ));
+    } else {
+      if (!state.accessibleMode) return;
+      final fontIdx = state.preAccessibleFontSize ?? AppFontSize.standard.index;
+      final safeIdx = fontIdx.clamp(0, AppFontSize.values.length - 1);
+      await update(state.copyWith(
+        accessibleMode: false,
+        largeButtons: state.preAccessibleLargeButtons ?? false,
+        fontSize: AppFontSize.values[safeIdx],
+        clearPreAccessibleSnapshot: true,
+      ));
+    }
   }
 }
 

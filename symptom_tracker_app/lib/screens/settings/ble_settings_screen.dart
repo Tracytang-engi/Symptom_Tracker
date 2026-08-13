@@ -74,11 +74,140 @@ class BleSettingsScreen extends ConsumerWidget {
             ),
           ),
 
+          // ─── 设备语音（测试用：发 BLE record_start / stop）────────────────
+          if (connState == BleConnectionState.connected) ...[
+            const _SectionHeader('Device Voice Note'),
+            _DeviceVoiceControls(),
+          ],
+
           // ─── 设备配置摘要 ──────────────────────────────────────────────────
           const _SectionHeader('Device Config'),
           _InfoTile(label: 'Sampling Rate', value: '${deviceSettings.samplingRateHz} Hz'),
           _InfoTile(label: 'Press Threshold', value: '${deviceSettings.pressThreshold} (ADC)'),
           _InfoTile(label: 'Calibrated', value: deviceSettings.isCalibrated ? 'Yes' : 'Not yet'),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceVoiceControls extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final voiceRec = ref.watch(isDeviceVoiceRecordingProvider);
+    final last = ref.watch(lastDeviceRecDoneProvider);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            voiceRec ? 'Recording on device…' : 'Idle',
+            style: TextStyle(
+              color: voiceRec ? Colors.red : Colors.grey,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: voiceRec
+                      ? null
+                      : () async {
+                          final ok = await requestDeviceVoiceRecord(ref, start: true);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(ok
+                                    ? 'record_start sent'
+                                    : 'Failed to start (window / connection?)'),
+                              ),
+                            );
+                          }
+                        },
+                  icon: const Icon(Icons.mic),
+                  label: const Text('Start'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: !voiceRec
+                      ? null
+                      : () async {
+                          final ok = await requestDeviceVoiceRecord(ref, start: false);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(ok ? 'record_stop sent' : 'Failed to stop'),
+                              ),
+                            );
+                          }
+                        },
+                  icon: const Icon(Icons.stop),
+                  label: const Text('Stop'),
+                ),
+              ),
+            ],
+          ),
+          if (last != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Last: ${last.path}\n'
+              '${(last.durationMs / 1000).toStringAsFixed(1)}s · '
+              '${(last.sizeBytes / 1024).toStringAsFixed(1)} KB',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Clear device recordings?'),
+                  content: const Text(
+                    'Deletes all WAV files on the ESP32 to free flash. '
+                    'Anything not downloaded will be lost.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm != true) return;
+              final ok =
+                  await ref.read(bleServiceProvider).writeFileClear();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(ok
+                        ? 'file_clear sent — check Serial for free space'
+                        : 'Failed to send file_clear'),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.delete_sweep_outlined),
+            label: const Text('Clear device storage'),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Auto-delete only after a successful download. '
+            'If flash is full, new recording is refused until files are downloaded '
+            '(or use Clear device storage). Per-event voice is capped at 30s total.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
         ],
       ),
     );

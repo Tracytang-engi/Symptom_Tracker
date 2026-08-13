@@ -1,40 +1,43 @@
-import '../theme/app_theme.dart';  // import = 引入其他文件；.. 表示上一级目录
+import '../theme/app_theme.dart';
 
-// 枚举：深色模式选项
 enum DarkModeOption { system, light, dark }
 
-// 枚举：事件结束后的行为
 enum PostEventAction { nothing, silentNotification, promptTags, promptIfAbnormal }
 
-// 枚举：数据平滑程度
 enum DataSmoothingLevel { none, low, medium, high }
 
 // UserSettings：App 界面与行为的所有用户偏好设置
 class UserSettings {
-  final AppThemeVariant themeVariant;      // 主题颜色变体（teal / sage）
-  final DarkModeOption darkMode;           // 深色模式
-  final AppFontSize fontSize;             // 字体大小等级
-  final bool simplifiedUI;               // 简化界面（适合不识字患者）
-  final bool largeButtons;               // 大按钮模式
-  final bool leftHandMode;               // 左手模式（镜像导航栏）
-  final bool showRecordingFeature;       // 是否显示语音录音按钮
-  final bool autoSaveRecording;          // 录音后自动保存
-  final bool keepOriginalRecording;      // 保留原始音频文件
-  final bool promptTagAfterRecording;    // 录音完成后提示选标签
-  final bool enableContinuousPressure;   // 持续发送实时压力数据
-  final DataSmoothingLevel dataSmoothing; // 压力曲线平滑程度
-  final PostEventAction postEventAction;  // 事件结束后触发什么
-  final bool dailySummaryReminder;       // 每日统计提醒
-  final bool deviceLowBatteryReminder;   // 设备低电量提醒
-  final bool deviceDisconnectedReminder; // 设备断开提醒
-  final bool allowDataExport;            // 允许导出数据
-  final String activeProfileId;          // 当前激活的症状档案 ID
+  final AppThemeVariant themeVariant;
+  final DarkModeOption darkMode;
+  final AppFontSize fontSize;
+  final bool accessibleMode;             // Accessible Mode（学习障碍友好）
+  final bool largeButtons;
+  final bool leftHandMode;
+  final bool showRecordingFeature;
+  final bool autoSaveRecording;
+  final bool keepOriginalRecording;
+  final bool promptTagAfterRecording;
+  final bool enableContinuousPressure;
+  final DataSmoothingLevel dataSmoothing;
+  final PostEventAction postEventAction;
+  final bool dailySummaryReminder;
+  final bool deviceLowBatteryReminder;
+  final bool deviceDisconnectedReminder;
+  final bool allowDataExport;
+  final String activeProfileId;
 
-  const UserSettings({                   // const 构造函数，所有默认值编译期确定
+  /// 进入 Accessible Mode 前的字号（index），退出时恢复
+  final int? preAccessibleFontSize;
+
+  /// 进入 Accessible Mode 前的大按钮开关，退出时恢复
+  final bool? preAccessibleLargeButtons;
+
+  const UserSettings({
     this.themeVariant = AppThemeVariant.teal,
     this.darkMode = DarkModeOption.system,
     this.fontSize = AppFontSize.standard,
-    this.simplifiedUI = false,
+    this.accessibleMode = false,
     this.largeButtons = false,
     this.leftHandMode = false,
     this.showRecordingFeature = true,
@@ -49,13 +52,18 @@ class UserSettings {
     this.deviceDisconnectedReminder = true,
     this.allowDataExport = true,
     this.activeProfileId = 'default',
+    this.preAccessibleFontSize,
+    this.preAccessibleLargeButtons,
   });
 
-  UserSettings copyWith({                // 返回修改了指定字段的新对象
+  /// 旧代码兼容别名
+  bool get simplifiedUI => accessibleMode;
+
+  UserSettings copyWith({
     AppThemeVariant? themeVariant,
     DarkModeOption? darkMode,
     AppFontSize? fontSize,
-    bool? simplifiedUI,
+    bool? accessibleMode,
     bool? largeButtons,
     bool? leftHandMode,
     bool? showRecordingFeature,
@@ -70,12 +78,15 @@ class UserSettings {
     bool? deviceDisconnectedReminder,
     bool? allowDataExport,
     String? activeProfileId,
+    int? preAccessibleFontSize,
+    bool? preAccessibleLargeButtons,
+    bool clearPreAccessibleSnapshot = false,
   }) {
     return UserSettings(
       themeVariant: themeVariant ?? this.themeVariant,
       darkMode: darkMode ?? this.darkMode,
       fontSize: fontSize ?? this.fontSize,
-      simplifiedUI: simplifiedUI ?? this.simplifiedUI,
+      accessibleMode: accessibleMode ?? this.accessibleMode,
       largeButtons: largeButtons ?? this.largeButtons,
       leftHandMode: leftHandMode ?? this.leftHandMode,
       showRecordingFeature: showRecordingFeature ?? this.showRecordingFeature,
@@ -90,14 +101,21 @@ class UserSettings {
       deviceDisconnectedReminder: deviceDisconnectedReminder ?? this.deviceDisconnectedReminder,
       allowDataExport: allowDataExport ?? this.allowDataExport,
       activeProfileId: activeProfileId ?? this.activeProfileId,
+      preAccessibleFontSize: clearPreAccessibleSnapshot
+          ? null
+          : (preAccessibleFontSize ?? this.preAccessibleFontSize),
+      preAccessibleLargeButtons: clearPreAccessibleSnapshot
+          ? null
+          : (preAccessibleLargeButtons ?? this.preAccessibleLargeButtons),
     );
   }
 
-  Map<String, dynamic> toJson() => {    // 序列化为 Map，用于 Hive 持久化
-    'themeVariant': themeVariant.index,  // .index = 枚举转整数（0,1,2...）
+  Map<String, dynamic> toJson() => {
+    'themeVariant': themeVariant.index,
     'darkMode': darkMode.index,
     'fontSize': fontSize.index,
-    'simplifiedUI': simplifiedUI,
+    'accessibleMode': accessibleMode,
+    'simplifiedUI': accessibleMode, // 兼容旧键
     'largeButtons': largeButtons,
     'leftHandMode': leftHandMode,
     'showRecordingFeature': showRecordingFeature,
@@ -112,13 +130,17 @@ class UserSettings {
     'deviceDisconnectedReminder': deviceDisconnectedReminder,
     'allowDataExport': allowDataExport,
     'activeProfileId': activeProfileId,
+    'preAccessibleFontSize': preAccessibleFontSize,
+    'preAccessibleLargeButtons': preAccessibleLargeButtons,
   };
 
-  factory UserSettings.fromJson(Map<dynamic, dynamic> json) => UserSettings(  // 从 Map 还原
-    themeVariant: AppThemeVariant.values[json['themeVariant'] as int? ?? 0],   // .values[i] = 取第 i 个枚举值
+  factory UserSettings.fromJson(Map<dynamic, dynamic> json) => UserSettings(
+    themeVariant: AppThemeVariant.values[json['themeVariant'] as int? ?? 0],
     darkMode: DarkModeOption.values[json['darkMode'] as int? ?? 0],
     fontSize: AppFontSize.values[json['fontSize'] as int? ?? 1],
-    simplifiedUI: json['simplifiedUI'] as bool? ?? false,
+    accessibleMode: json['accessibleMode'] as bool? ??
+        json['simplifiedUI'] as bool? ??
+        false,
     largeButtons: json['largeButtons'] as bool? ?? false,
     leftHandMode: json['leftHandMode'] as bool? ?? false,
     showRecordingFeature: json['showRecordingFeature'] as bool? ?? true,
@@ -133,5 +155,7 @@ class UserSettings {
     deviceDisconnectedReminder: json['deviceDisconnectedReminder'] as bool? ?? true,
     allowDataExport: json['allowDataExport'] as bool? ?? true,
     activeProfileId: json['activeProfileId'] as String? ?? 'default',
+    preAccessibleFontSize: json['preAccessibleFontSize'] as int?,
+    preAccessibleLargeButtons: json['preAccessibleLargeButtons'] as bool?,
   );
 }

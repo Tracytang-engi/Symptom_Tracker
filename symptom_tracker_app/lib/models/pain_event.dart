@@ -10,11 +10,16 @@ class PainEvent {
   final double peakForce;      // 峰值力度 0.0~1.0
   final List<int> rawSamples;  // List<int> = 整数列表；原始 ADC 采样序列
   final List<String> tags;     // 贴在这次事件上的标签 ID 列表
-  final String? voiceNotePath; // ? 表示可为 null；语音备注文件路径
+  /// 本地语音文件路径（手机录 + 从设备下载后）
+  final List<String> voiceNotePaths;
   final String? textNote;      // 文字备注
   final bool fromDevice;       // true = 硬件按压，false = 手机手动输入
+  /// ESP32 疼痛开始 millis，对应设备文件名如 /rec_12345_0.wav
+  final String? deviceEventKey;
+  /// 尚未下载到手机的 SPIFFS 路径
+  final List<String> pendingDeviceRecPaths;
 
-  const PainEvent({            // const 构造函数：对象在编译期即可确定，提升性能
+  const PainEvent({
     required this.id,
     required this.profileId,
     required this.startTime,
@@ -22,14 +27,20 @@ class PainEvent {
     required this.durationMs,
     required this.meanForce,
     required this.peakForce,
-    this.rawSamples = const [],  // const [] = 编译期常量空列表，节省内存
+    this.rawSamples = const [],
     this.tags = const [],
-    this.voiceNotePath,          // 可空字段不传时默认 null
+    this.voiceNotePaths = const [],
     this.textNote,
     this.fromDevice = true,
+    this.deviceEventKey,
+    this.pendingDeviceRecPaths = const [],
   });
 
-  PainEvent copyWith({           // 产生"修改了部分字段"的新对象，原对象不变（不可变模式）
+  /// 兼容旧字段：取第一条本地语音路径
+  String? get voiceNotePath =>
+      voiceNotePaths.isEmpty ? null : voiceNotePaths.first;
+
+  PainEvent copyWith({
     String? id,
     String? profileId,
     DateTime? startTime,
@@ -39,9 +50,12 @@ class PainEvent {
     double? peakForce,
     List<int>? rawSamples,
     List<String>? tags,
-    String? voiceNotePath,
+    List<String>? voiceNotePaths,
     String? textNote,
     bool? fromDevice,
+    String? deviceEventKey,
+    List<String>? pendingDeviceRecPaths,
+    bool clearTextNote = false,
   }) {
     return PainEvent(
       id: id ?? this.id,
@@ -53,58 +67,84 @@ class PainEvent {
       peakForce: peakForce ?? this.peakForce,
       rawSamples: rawSamples ?? this.rawSamples,
       tags: tags ?? this.tags,
-      voiceNotePath: voiceNotePath ?? this.voiceNotePath,  // 注意：null 也会被 ?? 跳过，保留旧值
-      textNote: textNote ?? this.textNote,
+      voiceNotePaths: voiceNotePaths ?? this.voiceNotePaths,
+      textNote: clearTextNote ? null : (textNote ?? this.textNote),
       fromDevice: fromDevice ?? this.fromDevice,
+      deviceEventKey: deviceEventKey ?? this.deviceEventKey,
+      pendingDeviceRecPaths:
+          pendingDeviceRecPaths ?? this.pendingDeviceRecPaths,
     );
   }
 
-  Map<String, dynamic> toJson() => {   // 序列化：把对象转为 Map，存入 Hive
-    'id': id,
-    'profileId': profileId,
-    'startTime': startTime.toIso8601String(),  // DateTime → 标准 ISO 字符串（可存储）
-    'endTime': endTime.toIso8601String(),
-    'durationMs': durationMs,
-    'meanForce': meanForce,
-    'peakForce': peakForce,
-    'rawSamples': rawSamples,
-    'tags': tags,
-    'voiceNotePath': voiceNotePath,
-    'textNote': textNote,
-    'fromDevice': fromDevice,
-  };
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'profileId': profileId,
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'durationMs': durationMs,
+        'meanForce': meanForce,
+        'peakForce': peakForce,
+        'rawSamples': rawSamples,
+        'tags': tags,
+        'voiceNotePaths': voiceNotePaths,
+        // 旧字段：保留第一条，兼容旧版读盘
+        if (voiceNotePath != null) 'voiceNotePath': voiceNotePath,
+        'textNote': textNote,
+        'fromDevice': fromDevice,
+        'deviceEventKey': deviceEventKey,
+        'pendingDeviceRecPaths': pendingDeviceRecPaths,
+      };
 
-  factory PainEvent.fromJson(Map<dynamic, dynamic> json) => PainEvent(  // 反序列化：从 Map 还原对象
-    id: json['id'] as String,
-    profileId: json['profileId'] as String? ?? 'default',
-    startTime: DateTime.parse(json['startTime'] as String),  // ISO 字符串 → DateTime
-    endTime: DateTime.parse(json['endTime'] as String),
-    durationMs: json['durationMs'] as int,
-    meanForce: (json['meanForce'] as num).toDouble(),        // num = int 或 double 的父类
-    peakForce: (json['peakForce'] as num).toDouble(),
-    rawSamples: (json['rawSamples'] as List?)                // List? = 可能为 null 的列表
-        ?.map((e) => e as int)                               // .map() = 逐元素转换
-        .toList() ?? [],                                     // .toList() 转为 List；为 null 则用 []
-    tags: (json['tags'] as List?)?.map((e) => e as String).toList() ?? [],
-    voiceNotePath: json['voiceNotePath'] as String?,
-    textNote: json['textNote'] as String?,
-    fromDevice: json['fromDevice'] as bool? ?? true,
-  );
+  factory PainEvent.fromJson(Map<dynamic, dynamic> json) {
+    final paths = <String>[];
+    final list = json['voiceNotePaths'] as List?;
+    if (list != null) {
+      for (final e in list) {
+        if (e is String && e.isNotEmpty) paths.add(e);
+      }
+    }
+    final legacy = json['voiceNotePath'] as String?;
+    if (legacy != null && legacy.isNotEmpty && !paths.contains(legacy)) {
+      paths.insert(0, legacy);
+    }
 
-  // get = 只读计算属性，每次访问时动态计算，不存储
-  String get formattedDuration {         // 把毫秒格式化为"48s"或"2m 5s"
-    final s = durationMs ~/ 1000;        // ~/ = 整除（取整数部分）
-    if (s < 60) return '${s}s';          // $变量 = 字符串插值
-    return '${s ~/ 60}m ${s % 60}s';    // % = 取余
+    return PainEvent(
+      id: json['id'] as String,
+      profileId: json['profileId'] as String? ?? 'default',
+      startTime: DateTime.parse(json['startTime'] as String),
+      endTime: DateTime.parse(json['endTime'] as String),
+      durationMs: json['durationMs'] as int,
+      meanForce: (json['meanForce'] as num).toDouble(),
+      peakForce: (json['peakForce'] as num).toDouble(),
+      rawSamples: (json['rawSamples'] as List?)
+              ?.map((e) => e as int)
+              .toList() ??
+          [],
+      tags: (json['tags'] as List?)?.map((e) => e as String).toList() ?? [],
+      voiceNotePaths: paths,
+      textNote: json['textNote'] as String?,
+      fromDevice: json['fromDevice'] as bool? ?? true,
+      deviceEventKey: json['deviceEventKey'] as String?,
+      pendingDeviceRecPaths: (json['pendingDeviceRecPaths'] as List?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+    );
   }
 
-  String get peakForcePercent => '${(peakForce * 100).round()}%';   // .round() = 四舍五入
+  String get formattedDuration {
+    final s = durationMs ~/ 1000;
+    if (s < 60) return '${s}s';
+    return '${s ~/ 60}m ${s % 60}s';
+  }
+
+  String get peakForcePercent => '${(peakForce * 100).round()}%';
   String get meanForcePercent => '${(meanForce * 100).round()}%';
 
-  bool get isSameDay {                   // 判断事件是否发生在今天
-    final now = DateTime.now();          // DateTime.now() = 当前时间
+  bool get isSameDay {
+    final now = DateTime.now();
     return startTime.year == now.year &&
         startTime.month == now.month &&
-        startTime.day == now.day;        // && = 逻辑与（全部为真才为真）
+        startTime.day == now.day;
   }
 }

@@ -41,17 +41,18 @@ class PostEventService {
         break;
 
       case PostEventAction.promptTags:
-        if (context != null && context.mounted) {  // .mounted = 判断 Widget 是否还在树上（防止内存泄漏）
-          onTagsRequested?.call();       // ?. = 安全调用；.call() = 调用函数类型变量
+        // 有回调则弹标签；否则退化为静默通知
+        if (onTagsRequested != null) {
+          onTagsRequested();
         } else {
-          await _sendNotification(event);          // 后台时退化为通知
+          await _sendNotification(event);
         }
         break;
 
       case PostEventAction.promptIfAbnormal:
-        if (_isAbnormal(event, recentEvents)) {    // 只在异常事件时才提示
-          if (context != null && context.mounted) {
-            onTagsRequested?.call();
+        if (_isAbnormal(event, recentEvents)) {
+          if (onTagsRequested != null) {
+            onTagsRequested();
           } else {
             await _sendNotification(event);
           }

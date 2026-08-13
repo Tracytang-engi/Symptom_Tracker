@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../models/user_settings.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
@@ -109,24 +110,19 @@ class AppearanceSettingsScreen extends ConsumerWidget {
             ),
           ),
 
-          // ─── 简化 UI ────────────────────────────────────────────────────────
-          _SectionHeader('Accessibility'),
-          SwitchListTile(
-            title: const Text('Simplified UI'),
-            subtitle: const Text('Large icons, fewer screens — for non-readers'),
-            value: settings.simplifiedUI,
-            onChanged: (v) => notifier.patch((s) => s.copyWith(simplifiedUI: v)),
-          ),
-          SwitchListTile(
-            title: const Text('Large Buttons'),
-            value: settings.largeButtons,
-            onChanged: (v) => notifier.patch((s) => s.copyWith(largeButtons: v)),
-          ),
+          _SectionHeader('Layout'),
           SwitchListTile(
             title: const Text('Left-hand Mode'),
             subtitle: const Text('Mirror the navigation bar'),
             value: settings.leftHandMode,
             onChanged: (v) => notifier.patch((s) => s.copyWith(leftHandMode: v)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.accessibility_new),
+            title: const Text('Accessible Mode'),
+            subtitle: const Text('Open Accessibility settings'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/accessibility'),
           ),
         ],
       ),

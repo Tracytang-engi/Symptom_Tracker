@@ -20,8 +20,9 @@ void main() async {                          // async = 异步函数，内部可
   runApp(
     ProviderScope(                           // ProviderScope = Riverpod 的全局容器，必须包在最外层
       overrides: [
-        // 把已初始化的 SosService 注入，避免重复 init
+        // 把已初始化的服务注入，避免重复 init
         sosServiceProvider.overrideWithValue(sosService),
+        postEventServiceProvider.overrideWithValue(postEventService),
       ],
       child: const _AppWrapper(),
     ),

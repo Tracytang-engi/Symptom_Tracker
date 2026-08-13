@@ -49,14 +49,23 @@ class Tag {                        // class = 类定义，面向对象的基本�
 
   // static = 静态成员，不需要创建 Tag 实例就能用；get = 只读属性（getter）
   static List<Tag> get defaults => [   // List<Tag> = Tag 对象的列表
-    Tag(id: 'after_exercise', name: 'After Exercise', icon: 'fitness_center', sortOrder: 0),
-    Tag(id: 'after_meal',     name: 'After Meal',     icon: 'restaurant',     sortOrder: 1),
-    Tag(id: 'after_waking',   name: 'After Waking',   icon: 'wb_sunny',       sortOrder: 2),
-    Tag(id: 'before_medication', name: 'Before Medication', icon: 'medication',   sortOrder: 3),
-    Tag(id: 'after_medication',  name: 'After Medication',  icon: 'check_circle', sortOrder: 4),
-    Tag(id: 'during_period',  name: 'During Period',   icon: 'calendar_month',     sortOrder: 5),
-    Tag(id: 'emotional_stress', name: 'Emotional Stress', icon: 'sentiment_stressed', sortOrder: 6),
-    Tag(id: 'light_sensitivity', name: 'Light Sensitivity', icon: 'light_mode',  sortOrder: 7),
-    Tag(id: 'poor_sleep',     name: 'Poor Sleep',      icon: 'bedtime',        sortOrder: 8),
+    Tag(id: 'after_meal',        name: 'After Meal',        icon: 'restaurant',      sortOrder: 0),
+    Tag(id: 'after_exercise',    name: 'After Exercise',    icon: 'directions_run',  sortOrder: 1),
+    Tag(id: 'during_sleep',      name: 'During Sleep',      icon: 'bedtime',         sortOrder: 2),
+    Tag(id: 'after_medication',  name: 'After Medication',  icon: 'medication',      sortOrder: 3),
+    Tag(id: 'after_waking',      name: 'After Waking',      icon: 'wb_sunny',        sortOrder: 4),
+    Tag(id: 'before_medication', name: 'Before Medication', icon: 'medication',      sortOrder: 5),
+    Tag(id: 'during_period',     name: 'During Period',     icon: 'calendar_month',  sortOrder: 6),
+    Tag(id: 'emotional_stress',  name: 'Emotional Stress',  icon: 'sentiment_stressed', sortOrder: 7),
+    Tag(id: 'light_sensitivity', name: 'Light Sensitivity', icon: 'light_mode',      sortOrder: 8),
+    Tag(id: 'poor_sleep',        name: 'Poor Sleep',        icon: 'bedtime',         sortOrder: 9),
+  ];
+
+  /// Accessible Mode 标签弹层固定四格（饭后 / 运动后 / 睡眠时 / 服药后）
+  static List<Tag> get accessibleQuickTags => [
+    Tag(id: 'after_meal',       name: 'After Meal',       icon: 'restaurant',     sortOrder: 0),
+    Tag(id: 'after_exercise',   name: 'After Exercise',   icon: 'directions_run', sortOrder: 1),
+    Tag(id: 'during_sleep',     name: 'During Sleep',     icon: 'bedtime',        sortOrder: 2),
+    Tag(id: 'after_medication', name: 'After Medication', icon: 'medication',     sortOrder: 3),
   ];
 }

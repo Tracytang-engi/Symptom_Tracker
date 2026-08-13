@@ -144,6 +144,7 @@ class LabelSettingsScreen extends ConsumerWidget {
   IconData _icon(String name) {
     const m = {
       'fitness_center': Icons.fitness_center,
+      'directions_run': Icons.directions_run,
       'restaurant': Icons.restaurant,
       'wb_sunny': Icons.wb_sunny,
       'medication': Icons.medication,
@@ -153,6 +154,6 @@ class LabelSettingsScreen extends ConsumerWidget {
       'light_mode': Icons.light_mode,
       'bedtime': Icons.bedtime,
     };
-    return m[name] ?? Icons.label;  // ?? = 不认识的图标名用默认值
+    return m[name] ?? Icons.label;
   }
 }

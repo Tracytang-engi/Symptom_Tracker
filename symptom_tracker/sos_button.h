@@ -13,3 +13,6 @@ void SOS_init();
 // 每次 loop() 调用，检测按钮状态（非阻塞，不用 delay）
 // 返回 true = 本次循环触发了 SOS；false = 未触发
 bool SOS_update();
+
+/** SOS 按钮当前是否按住（消抖后），用于状态灯常亮 */
+bool SOS_isHeld();

@@ -23,13 +23,10 @@ static bool     s_pressed      = false; // 当前消抖后的按压状态
 // ─────────────────────────────────────────────────────────
 
 void FSR_init() {
-    // ESP32 ADC 默认分辨率是 12 位（0~4095），这里显式设置以防万一
-    analogReadResolution(12);
+    // ESP32 ADC 默认已是 12 位（0~4095），不要再调 analogReadResolution：
+    // Arduino Core 3.x 下它可能触发新旧 ADC 驱动冲突。
 
     // GPIO34 是仅输入引脚，不需要 pinMode 设置
-    // 但如果使用其他 GPIO（如 GPIO32），需要取消下面这行注释：
-    // pinMode(FSR_PIN, INPUT);
-
     Serial.println("[FSR] 初始化完成，引脚: GPIO" + String(FSR_PIN));
 }
 

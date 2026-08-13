@@ -88,7 +88,7 @@
  * 连续读到 N 次低于阈值，才确认"松开"。
  * 防止信号抖动造成误触发。
  */
-#define FSR_DEBOUNCE_COUNT  3
+#define FSR_DEBOUNCE_COUNT  8
 
 /**
  * FSR_SAMPLE_INTERVAL_MS：主循环采样间隔（毫秒）
@@ -103,15 +103,28 @@
 // ═══════════════════════════════════════════════════
 
 /**
- * MAX_SAMPLES：单次按压事件最多保存的采样点数
+ * MAX_SAMPLES：单次疼痛事件最多保存的采样点数
  *
- * 20ms × 500 = 10000ms = 最多记录 10 秒的压力曲线。
- * 每个点占 2 字节（uint16_t），共 1000 字节。
- * ESP32 有 520KB RAM，完全够用。
- *
- * 如果按压超过 10 秒，超出的部分会被丢弃（保留最新的 MAX_SAMPLES 个点）。
+ * 20ms × 3000 = 60000ms = 最多记录 60 秒的压力曲线。
+ * 每个点 2 字节 → 约 6KB；ESP32 RAM 足够。
+ * 超过 60 秒：滑动窗口保留最近 60s，并自动结束事件。
  */
-#define MAX_SAMPLES  500
+#define MAX_SAMPLES  3000
+
+/** 单次疼痛最长时长（毫秒）；到点自动 finalize */
+#define EVENT_MAX_DURATION_MS  60000UL
+
+/**
+ * EVENT_MERGE_GAP_MS：松开后若在此时间内再次按下，仍视为同一次疼痛事件
+ * （握力/马达抖动常 >1s，用 2.5s 更稳）
+ */
+#define EVENT_MERGE_GAP_MS  2500
+
+/**
+ * OFFLINE_QUEUE_MAX_BYTES：离线未同步事件（含曲线）占用上限
+ * 满则拒绝开始新记录，不丢弃已存事件。
+ */
+#define OFFLINE_QUEUE_MAX_BYTES  (100UL * 1024UL)
 
 // ═══════════════════════════════════════════════════
 //  PWM / 振动强度参数
@@ -164,6 +177,46 @@
 #define BLE_DEVICE_NAME  "SymptomTracker"
 
 // ═══════════════════════════════════════════════════
+//  INMP441 麦克风 I2S 引脚
+// ═══════════════════════════════════════════════════
+
+#define MIC_SCK_PIN   14   // I2S 位时钟（连 INMP441 SCK）
+#define MIC_WS_PIN    15   // I2S 字选择（连 INMP441 WS）
+#define MIC_SD_PIN    32   // I2S 数据输入（连 INMP441 SD）
+
+/**
+ * MIC_I2S_SLOT_RIGHT：I2S 单声道取哪一侧槽位
+ * 0 = LEFT（L/R→GND，与面包板已验证配置一致）
+ * 1 = RIGHT（仅当 LEFT 长期全 0 时再试）
+ */
+#define MIC_I2S_SLOT_RIGHT  0
+
+// ═══════════════════════════════════════════════════
+//  录音参数
+// ═══════════════════════════════════════════════════
+
+/**
+ * MIC_SAMPLE_RATE：采样率（Hz）
+ * 8000 = 8kHz，语音备注够用，体积约为 16kHz 的一半（16KB/秒）。
+ */
+#define MIC_SAMPLE_RATE     8000
+
+/**
+ * MIC_MAX_DURATION_S：同一疼痛事件下，所有语音段累计最长（秒）
+ * 可多段录制（/rec_<eventId>_0.wav, _1.wav…），累计满本值后拒绝再开始。
+ * 30 秒 × 16KB/秒 ≈ 480KB；SPIFFS 约 1.5MB，下载后应及时删除。
+ */
+#define MIC_MAX_DURATION_S  30
+
+/**
+ * MIC_DMA_BUF_COUNT / MIC_DMA_BUF_LEN：I2S DMA 缓冲区配置
+ * DMA（直接内存访问）：音频数据无需 CPU 干预即可从 I2S 硬件搬到内存。
+ * COUNT × LEN = 总缓冲样本数；增大可降低爆音风险，但会增加内存占用。
+ */
+#define MIC_DMA_BUF_COUNT   8
+#define MIC_DMA_BUF_LEN     512
+
+// ═══════════════════════════════════════════════════
 //  SOS 按钮配置
 // ═══════════════════════════════════════════════════
 
@@ -182,3 +235,44 @@
  * 50ms 是常用经验值，太小容易误触，太大会感觉迟钝。
  */
 #define SOS_DEBOUNCE_MS  50
+
+// ═══════════════════════════════════════════════════
+//  录音按钮（语音备注）配置
+// ═══════════════════════════════════════════════════
+
+/**
+ * REC_BTN_PIN：录音按钮 GPIO（INPUT_PULLUP，另一端接 GND）
+ * 与 SOS（GPIO25）分开，避免误触。
+ */
+#define REC_BTN_PIN  26
+
+/**
+ * VOICE_NOTE_WINDOW_MS：疼痛结束后，仍允许「开始」录音的时长（毫秒）
+ *
+ * 窗口：FSR 按下开始 → 疼痛结束 + 本值。
+ * 仅限制「按下录音键能否开始」；一旦已开始录音，最长仍可录 MIC_MAX_DURATION_S（默认 30s），
+ * 即使超出本窗口也不强制打断。
+ * 例：疼痛结束后第 10s 按录音 → 最多再录 30s → 到疼痛结束后第 40s。
+ */
+#define VOICE_NOTE_WINDOW_MS  15000
+
+/** 录音按钮消抖时间（毫秒），短按边沿检测用 */
+#define REC_BTN_DEBOUNCE_MS  50
+
+// ═══════════════════════════════════════════════════
+//  状态指示 LED
+// ═══════════════════════════════════════════════════
+
+/**
+ * STATUS_LED_PIN：状态灯 GPIO（低电平点亮）
+ * 接线：3.3V → 220~330Ω → LED(+) → LED(-) → GPIO13
+ * 勿用 5V Vin 直接灌进 GPIO。
+ */
+#define STATUS_LED_PIN  13
+
+/** 录音中慢闪：亮/灭各多少毫秒 */
+#define STATUS_LED_SLOW_MS   500
+
+/** 开始/结束双闪：每次亮或灭多少毫秒（快） */
+#define STATUS_LED_FAST_MS   80
+

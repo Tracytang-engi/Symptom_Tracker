@@ -149,15 +149,16 @@ class _CalibrationScreenState extends ConsumerState<CalibrationScreen> {
   Future<void> _saveCalibration() async {
     if (_results.length < 3) return;
 
-    // 把三步结果存入设备设置
+    // 满量程 = 重力 × 1.1；实际超过此值 → 映射钳到 100%
+    // 若重力已接近 ADC 上限，则 calibMax 封顶 4095
     await ref.read(deviceSettingsProvider.notifier).patch((s) => s.copyWith(
-      calibLight:  _results[0],                         // 轻触 ADC 中位数
+      calibLight:  _results[0],
       calibMedium: _results[1],
       calibStrong: _results[2],
-      calibMax:    (_results[2] * 1.3).round(),         // 满量程 = 重力 × 1.3（留余量）
+      calibMax:    (_results[2] * 1.1).round().clamp(_results[2] + 1, 4095),
     ));
 
-    if (mounted) Navigator.of(context).pop();   // 保存后关闭页面
+    if (mounted) Navigator.of(context).pop();
   }
 }
 

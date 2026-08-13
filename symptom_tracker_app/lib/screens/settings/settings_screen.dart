@@ -27,7 +27,7 @@ class SettingsScreen extends StatelessWidget {
 
           _SectionHeader('Appearance'),
           _SettingsTile(icon: Icons.palette,      label: 'Appearance',    path: '/settings/appearance',      desc: 'Theme, dark mode, font size'),
-          _SettingsTile(icon: Icons.accessibility,label: 'Accessibility', path: '/settings/accessibility',   desc: 'Simplified UI options'),
+          _SettingsTile(icon: Icons.accessibility,label: 'Accessibility', path: '/settings/accessibility',   desc: 'Accessible Mode, large buttons, font size'),
 
           _SectionHeader('Notifications'),
           _SettingsTile(icon: Icons.schedule,     label: 'Reminders',     path: '/settings/reminders',       desc: 'Daily summaries and alerts'),

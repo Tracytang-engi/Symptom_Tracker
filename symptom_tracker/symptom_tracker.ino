@@ -35,7 +35,24 @@
 #include "event_detector.h"
 #include "vibration.h"
 #include "ble_comm.h"
-#include "sos_button.h"  // SOS 长按按钮模块
+#include "sos_button.h"
+#include "rec_button.h"
+#include "mic_recorder.h"
+#include "status_led.h"
+#include "event_store.h"
+
+// 录音结束后统一通知 App（避免多处重复）；仅成功写出有效文件时才通知
+static void notifyRecordingDone() {
+    if (!MIC_lastRecordingOk()) {
+        Serial.println("[MIC] 跳过 rec_done：本次录音无效（建文件失败或空文件）");
+        return;
+    }
+    BLE_sendRecordingDone(
+        MIC_getLastFilePath(),
+        MIC_getLastDurationMs(),
+        MIC_getLastFileSize()
+    );
+}
 
 // ─── setup()：上电后执行一次 ────────────────────────────────
 void setup() {
@@ -52,7 +69,11 @@ void setup() {
     FSR_init();
     Vibration_init();
     Event_init();
-    SOS_init();   // SOS 按钮初始化（设置 GPIO25 内部上拉）
+    SOS_init();        // SOS 按钮初始化（设置 GPIO25 内部上拉）
+    RecBtn_init();     // 录音按钮初始化（GPIO26 内部上拉）
+    StatusLed_init();  // 状态 LED（GPIO13）
+    MIC_init();        // 麦克风 + SPIFFS 初始化
+    EventStore_init(); // 离线事件队列（共用 SPIFFS）
     BLE_init();
 
     Serial.println("----------------------------------------");
@@ -91,22 +112,80 @@ void loop() {
     }
 
     // ⑥ 检测 SOS 按钮（长按 2 秒触发）
-    //    SOS_update() 内部已处理消抖和长按计时，返回 true 表示本次触发
     if (SOS_update()) {
-        BLE_sendSos();                  // 通过 BLE 发送 SOS 事件给手机
-        Vibration_patternStart();       // 震动反馈：告知用户 SOS 已发出
+        BLE_sendSos();
+        Vibration_patternStart();
+    }
+    StatusLed_setSosHeld(SOS_isHeld());  // 按住 SOS 时 LED 常亮
+
+    // ⑥b 录音按钮逻辑：
+    //   - 已在录音 → 短按随时可停（即使已过 15s 窗口）
+    //   - 未在录音 → 仅窗口内可开始；开始后最长 MIC_MAX_DURATION_S（30s），不因窗口关闭而打断
+    if (RecBtn_update()) {
+        if (MIC_isRecording()) {
+            MIC_stopRecording();
+            Vibration_patternStart();
+            Serial.println("[RecBtn] 停止录音");
+        } else if (Event_isVoiceWindowOpen()) {
+            char idBuf[24];
+            snprintf(idBuf, sizeof(idBuf), "%lu", Event_getVoiceEventId());
+            if (MIC_startRecording(idBuf)) {
+                StatusLed_pulseDouble();  // 开始：快速双闪
+                StatusLed_setRecording(true);
+                Vibration_patternStart();
+                Serial.printf("[RecBtn] 开始录音，关联事件 %s（本事件累计最长 %ds）\n",
+                              idBuf, MIC_MAX_DURATION_S);
+            } else {
+                Serial.println("[RecBtn] 无法开始录音（空间不足 / 累计已满 / SPIFFS 异常）");
+            }
+        } else {
+            Serial.println("[RecBtn] 忽略：不在可开始录音的窗口内");
+        }
     }
 
-    // ⑦ 处理 BLE 连接/断开事件（断开后自动重新广播）
+    // ⑦ 处理 App 发来的录音控制指令（BLE Write → BLE_getRecordCmd()）
+    {
+        uint8_t recCmd = BLE_getRecordCmd();  // 取一次指令，自动清零
+        if (recCmd == 1 && !MIC_isRecording()) {
+            bool started = false;
+            if (Event_isVoiceWindowOpen()) {
+                char idBuf[24];
+                snprintf(idBuf, sizeof(idBuf), "%lu", Event_getVoiceEventId());
+                started = MIC_startRecording(idBuf);
+            } else {
+                started = MIC_startRecording();
+            }
+            if (started) {
+                StatusLed_pulseDouble();
+                StatusLed_setRecording(true);
+            }
+        } else if (recCmd == 2 && MIC_isRecording()) {
+            MIC_stopRecording();
+        }
+    }
+
+    // ⑧ 录音刚结束（按钮停 / App 停 / 达到最长 30s）→ LED 双闪 + 通知一次
+    static bool s_wasRecording = false;
+    if (s_wasRecording && !MIC_isRecording()) {
+        StatusLed_pulseDouble();
+        StatusLed_setRecording(false);
+        notifyRecordingDone();
+    }
+    s_wasRecording = MIC_isRecording();
+
+    // ⑧b 推进状态灯闪烁（必须每 loop 调用）
+    StatusLed_update();
+
+    // ⑨ 处理 BLE 连接/断开事件（断开后自动重新广播）
     BLE_update();
 
-    // ⑧ 发送实时压力值（BLE Notify + Serial 打印）
+    // ⑩ 发送实时压力值（BLE Notify + Serial 打印）
     //    仅在按压期间发送，减少无效流量
     if (pressed || Event_isRecording()) {
         BLE_sendPressure(rawValue);
     }
 
-    // ⑨ 等待下一个采样间隔
+    // ⑪ 等待下一个采样间隔
     //    20ms = 50Hz 采样率
     //    注意：这里的 delay 会让整个循环暂停 20ms，
     //    振动状态机使用 millis() 计时，所以仍然准确。

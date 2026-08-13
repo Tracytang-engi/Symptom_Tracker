@@ -93,3 +93,8 @@ bool SOS_update() {
 
     return false;  // 本次 loop() 没有触发
 }
+
+bool SOS_isHeld() {
+    // 消抖确认后的按下状态（LOW = 按住）
+    return s_stableState == LOW;
+}
