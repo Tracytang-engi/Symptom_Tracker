@@ -39,6 +39,26 @@ class BackupService {
     return _auth('/auth/login', email, password);
   }
 
+  Future<void> deleteAccount() async {
+    _requireConfigured();
+    final token = storage.accountToken;
+    if (token == null || token.isEmpty) {
+      throw BackupException('Log in before deleting your account.');
+    }
+
+    final response = await http.delete(
+      _uri('/account'),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(minutes: 1));
+    if (response.statusCode != 200) {
+      throw BackupException(_errorMessage(response));
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map || decoded['ok'] != true) {
+      throw BackupException('The server did not confirm account deletion.');
+    }
+  }
+
   Future<void> upload() async {
     await uploadAfterWake();
   }
@@ -85,7 +105,8 @@ class BackupService {
     if (left > Duration.zero) await Future<void>.delayed(left);
   }
 
-  Future<_PutResult> _putBackup(String body, {required Duration timeout}) async {
+  Future<_PutResult> _putBackup(String body,
+      {required Duration timeout}) async {
     final token = storage.accountToken;
     if (token == null || token.isEmpty) return _PutResult.fatal;
     try {
@@ -116,7 +137,8 @@ class BackupService {
   }
 
   /// 找回前必须重新提交密码。不使用已经保存的登录令牌。
-  Future<void> restore({required String email, required String password}) async {
+  Future<void> restore(
+      {required String email, required String password}) async {
     final token = await login(email, password);
     final response = await http.get(
       _uri('/backup'),
@@ -163,7 +185,9 @@ class BackupService {
   String _errorMessage(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);
-      if (decoded is Map && decoded['error'] is String) return decoded['error'] as String;
+      if (decoded is Map && decoded['error'] is String) {
+        return decoded['error'] as String;
+      }
     } catch (_) {}
     return 'Server error (${response.statusCode}).';
   }
@@ -222,7 +246,8 @@ class BackupService {
       for (final raw in events) {
         if (raw is! Map) continue;
         final map = Map<String, dynamic>.from(raw);
-        final ids = (map['voiceFileIds'] as List?)?.whereType<String>().toList() ?? [];
+        final ids =
+            (map['voiceFileIds'] as List?)?.whereType<String>().toList() ?? [];
         final paths = <String>[];
         for (final id in ids) {
           final bytes = fileBytes[id];

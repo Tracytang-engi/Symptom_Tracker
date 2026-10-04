@@ -13,31 +13,89 @@ class SettingsScreen extends StatelessWidget {
         children: [
           // 每组设置有一个 SectionHeader + 若干 _SettingsTile
           _SectionHeader('Device'),
-          _SettingsTile(icon: Icons.vibration,   label: 'Vibration',     path: '/settings/vibration',       desc: 'Feedback mode and intensity'),
-          _SettingsTile(icon: Icons.tune,         label: 'Calibration',   path: '/settings/calibration',     desc: '3-step pressure baseline'),
-          _SettingsTile(icon: Icons.bluetooth,    label: 'BLE Device',    path: '/settings/ble',             desc: 'Connection & device info'),
+          _SettingsTile(
+              icon: Icons.vibration,
+              label: 'Vibration',
+              path: '/settings/vibration',
+              desc: 'Feedback mode and intensity'),
+          _SettingsTile(
+              icon: Icons.tune,
+              label: 'Calibration',
+              path: '/settings/calibration',
+              desc: '3-step pressure baseline'),
+          _SettingsTile(
+              icon: Icons.bluetooth,
+              label: 'BLE Device',
+              path: '/settings/ble',
+              desc: 'Connection & device info'),
 
           _SectionHeader('Recording'),
-          _SettingsTile(icon: Icons.label,        label: 'Labels',        path: '/settings/labels',          desc: 'Manage event tags'),
-          _SettingsTile(icon: Icons.mic,          label: 'Voice Notes',   path: '/settings/recording',       desc: 'Recording preferences'),
-          _SettingsTile(icon: Icons.notifications,label: 'After Event',   path: '/settings/post-event',      desc: 'Notification and tag prompts'),
+          _SettingsTile(
+              icon: Icons.label,
+              label: 'Labels',
+              path: '/settings/labels',
+              desc: 'Manage event tags'),
+          _SettingsTile(
+              icon: Icons.mic,
+              label: 'Voice Notes',
+              path: '/settings/recording',
+              desc: 'Recording preferences'),
+          _SettingsTile(
+              icon: Icons.notifications,
+              label: 'After Event',
+              path: '/settings/post-event',
+              desc: 'Notification and tag prompts'),
 
           _SectionHeader('Profile'),
-          _SettingsTile(icon: Icons.healing,      label: 'Symptom Profile',path: '/settings/symptom-profile',desc: 'Manage conditions'),
+          _SettingsTile(
+              icon: Icons.healing,
+              label: 'Symptom Profile',
+              path: '/settings/symptom-profile',
+              desc: 'Manage conditions'),
 
           _SectionHeader('Appearance'),
-          _SettingsTile(icon: Icons.palette,      label: 'Appearance',    path: '/settings/appearance',      desc: 'Theme, dark mode, font size'),
-          _SettingsTile(icon: Icons.accessibility,label: 'Accessibility', path: '/settings/accessibility',   desc: 'Accessible Mode, large buttons, font size'),
+          _SettingsTile(
+              icon: Icons.palette,
+              label: 'Appearance',
+              path: '/settings/appearance',
+              desc: 'Theme, dark mode, font size'),
+          _SettingsTile(
+              icon: Icons.accessibility,
+              label: 'Accessibility',
+              path: '/settings/accessibility',
+              desc: 'Accessible Mode, large buttons, font size'),
 
           _SectionHeader('Notifications'),
-          _SettingsTile(icon: Icons.schedule,     label: 'Reminders',     path: '/settings/reminders',       desc: 'Daily summaries and alerts'),
+          _SettingsTile(
+              icon: Icons.schedule,
+              label: 'Reminders',
+              path: '/settings/reminders',
+              desc: 'Daily summaries and alerts'),
 
           _SectionHeader('Privacy & Safety'),
-          _SettingsTile(icon: Icons.cloud_upload, label: 'Account & backup', path: '/settings/account',     desc: 'Optional login, backup, and recovery'),
-          _SettingsTile(icon: Icons.lock,         label: 'Privacy',       path: '/settings/privacy',         desc: 'Data export and storage'),
-          _SettingsTile(icon: Icons.supervisor_account, label: 'Guardian Mode', path: '/settings/guardian', desc: 'Experimental. You must send the text yourself'),
+          _SettingsTile(
+              icon: Icons.cloud_upload,
+              label: 'Account & backup',
+              path: '/settings/account',
+              desc: 'Optional login, backup, and recovery'),
+          _SettingsTile(
+              icon: Icons.lock,
+              label: 'Privacy',
+              path: '/settings/privacy',
+              desc: 'Data export and storage'),
+          _SettingsTile(
+              icon: Icons.supervisor_account,
+              label: 'Guardian Mode',
+              path: '/settings/guardian',
+              desc: 'Experimental. You must send the text yourself'),
 
-          const SizedBox(height: 20),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Text(
+              'This app does not diagnose or treat. In an emergency, call emergency services first or contact your guardian directly.',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ),
         ],
       ),
     );
@@ -68,8 +126,8 @@ class _SectionHeader extends StatelessWidget {
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String path;    // GoRouter 路径（绝对路径）
-  final String? desc;   // 副标题；? = 可选
+  final String path; // GoRouter 路径（绝对路径）
+  final String? desc; // 副标题；? = 可选
 
   const _SettingsTile({
     required this.icon,
@@ -83,9 +141,11 @@ class _SettingsTile extends StatelessWidget {
     return ListTile(
       leading: Icon(icon),
       title: Text(label),
-      subtitle: desc != null ? Text(desc!, style: const TextStyle(fontSize: 12)) : null,  // desc! = 已确认非 null
-      trailing: const Icon(Icons.chevron_right),   // 右箭头提示可点击
-      onTap: () => context.push(path),             // context.push = 推入新路由（有返回按钮）
+      subtitle: desc != null
+          ? Text(desc!, style: const TextStyle(fontSize: 12))
+          : null, // desc! = 已确认非 null
+      trailing: const Icon(Icons.chevron_right), // 右箭头提示可点击
+      onTap: () => context.push(path), // context.push = 推入新路由（有返回按钮）
     );
   }
 }

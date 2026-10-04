@@ -81,7 +81,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter your password again. The app will merge the backup into this phone.'),
+            const Text(
+                'Enter your password again. The app will merge the backup into this phone.'),
             const SizedBox(height: 12),
             TextField(
               controller: emailCtrl,
@@ -96,8 +97,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Recover')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Recover')),
         ],
       ),
     );
@@ -117,6 +122,42 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     });
   }
 
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'This permanently deletes your account and backup from the server. '
+          'Episodes stored on this phone will be kept.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete account'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await _run(() async {
+      await _backup.deleteAccount();
+      await ref.read(storageServiceProvider).clearAccount();
+      _password.clear();
+      if (mounted) {
+        setState(() {});
+        _snack(
+            'Account and server backup deleted. Episodes on this phone were kept.');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final storage = ref.watch(storageServiceProvider);
@@ -129,83 +170,98 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           title: Text(_backingUp ? 'Backing up' : 'Account & backup'),
           automaticallyImplyLeading: !_backingUp,
         ),
-        body: _backingUp ? _backupLoading() : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text(
-            'Episodes stay on this phone. The server is only a backup. '
-            'Nothing is downloaded unless you use Recover data.',
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 16),
-          if (!loggedIn) ...[
-            TextField(
-              controller: _email,
-              decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _password,
-              decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
-              obscureText: true,
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _busy
-                  ? null
-                  : () => _run(() async {
-                        await _backup.register(_email.text, _password.text);
-                        _password.clear();
-                        _snack('Account created. You can back up when you want.');
-                      }),
-              child: const Text('Create account'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _busy
-                  ? null
-                  : () => _run(() async {
-                        await _backup.login(_email.text, _password.text);
-                        _password.clear();
-                        _snack('Logged in.');
-                      }),
-              child: const Text('Log in'),
-            ),
-          ] else ...[
-            Text('Logged in as ${storage.accountEmail ?? ''}'),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _busy ? null : _backupNow,
-              child: const Text('Back up now'),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Backup takes about 2 minutes. The server may be asleep. '
-              'The app wakes it, then uploads again after 1 minute and after 2 minutes. '
-              'Keep this screen open until it finishes.',
-              style: TextStyle(color: Colors.grey),
-            ),
-            TextButton(
-              onPressed: _busy
-                  ? null
-                  : () => _run(() async {
-                        await ref.read(storageServiceProvider).clearAccount();
-                      }),
-              child: const Text('Log out'),
-            ),
-          ],
-          const Divider(height: 32),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.restore),
-            title: const Text('Recover data'),
-            subtitle: const Text('Asks for your password again, then merges the backup'),
-            onTap: _busy ? null : _restore,
-          ),
-          if (_busy) const LinearProgressIndicator(),
-        ],
-        ),
+        body: _backingUp
+            ? _backupLoading()
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const Text(
+                    'Episodes stay on this phone. The server is only a backup. '
+                    'Nothing is downloaded unless you use Recover data.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  if (!loggedIn) ...[
+                    TextField(
+                      controller: _email,
+                      decoration: const InputDecoration(
+                          labelText: 'Email', border: OutlineInputBorder()),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _password,
+                      decoration: const InputDecoration(
+                          labelText: 'Password', border: OutlineInputBorder()),
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(() async {
+                                await _backup.register(
+                                    _email.text, _password.text);
+                                _password.clear();
+                                _snack(
+                                    'Account created. You can back up when you want.');
+                              }),
+                      child: const Text('Create account'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(() async {
+                                await _backup.login(
+                                    _email.text, _password.text);
+                                _password.clear();
+                                _snack('Logged in.');
+                              }),
+                      child: const Text('Log in'),
+                    ),
+                  ] else ...[
+                    Text('Logged in as ${storage.accountEmail ?? ''}'),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _busy ? null : _backupNow,
+                      child: const Text('Back up now'),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Backup takes about 2 minutes. The server may be asleep. '
+                      'The app wakes it, then uploads again after 1 minute and after 2 minutes. '
+                      'Keep this screen open until it finishes.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(() async {
+                                await ref
+                                    .read(storageServiceProvider)
+                                    .clearAccount();
+                              }),
+                      child: const Text('Log out'),
+                    ),
+                    TextButton(
+                      onPressed: _busy ? null : _deleteAccount,
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Delete account'),
+                    ),
+                  ],
+                  const Divider(height: 32),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.restore),
+                    title: const Text('Recover data'),
+                    subtitle: const Text(
+                        'Asks for your password again, then merges the backup'),
+                    onTap: _busy ? null : _restore,
+                  ),
+                  if (_busy) const LinearProgressIndicator(),
+                ],
+              ),
       ),
     );
   }
