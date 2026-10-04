@@ -44,7 +44,13 @@ class BleSettingsScreen extends ConsumerWidget {
           ),
 
           if (battery != null)
-            _InfoTile(label: 'Battery', value: '$battery%', icon: Icons.battery_5_bar),
+            _InfoTile(label: 'Battery', value: '$battery%', icon: Icons.battery_5_bar)
+          else if (connState == BleConnectionState.connected)
+            const _InfoTile(
+              label: 'Battery',
+              value: 'Not wired',
+              icon: Icons.battery_unknown,
+            ),
 
           // ─── 操作按钮 ──────────────────────────────────────────────────────
           const _SectionHeader('Actions'),

@@ -113,9 +113,37 @@ class AppearanceSettingsScreen extends ConsumerWidget {
           _SectionHeader('Layout'),
           SwitchListTile(
             title: const Text('Left-hand Mode'),
-            subtitle: const Text('Mirror the navigation bar'),
+            subtitle: const Text('Mirror the navigation bar and home actions'),
             value: settings.leftHandMode,
             onChanged: (v) => notifier.patch((s) => s.copyWith(leftHandMode: v)),
+          ),
+          SwitchListTile(
+            title: const Text('Live pressure'),
+            subtitle: const Text('Show the gauge while the device is connected'),
+            value: settings.enableContinuousPressure,
+            onChanged: (v) => notifier.patch((s) => s.copyWith(enableContinuousPressure: v)),
+          ),
+          ListTile(
+            title: const Text('Curve smoothing'),
+            subtitle: Text(switch (settings.dataSmoothing) {
+              DataSmoothingLevel.none => 'Off',
+              DataSmoothingLevel.low => 'Low',
+              DataSmoothingLevel.medium => 'Medium',
+              DataSmoothingLevel.high => 'High',
+            }),
+            trailing: DropdownButton<DataSmoothingLevel>(
+              value: settings.dataSmoothing,
+              onChanged: (v) {
+                if (v == null) return;
+                notifier.patch((s) => s.copyWith(dataSmoothing: v));
+              },
+              items: const [
+                DropdownMenuItem(value: DataSmoothingLevel.none, child: Text('Off')),
+                DropdownMenuItem(value: DataSmoothingLevel.low, child: Text('Low')),
+                DropdownMenuItem(value: DataSmoothingLevel.medium, child: Text('Medium')),
+                DropdownMenuItem(value: DataSmoothingLevel.high, child: Text('High')),
+              ],
+            ),
           ),
           ListTile(
             leading: const Icon(Icons.accessibility_new),

@@ -23,11 +23,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
-    final pressure = ref.watch(realtimePressureProvider);
+    final settings = ref.watch(userSettingsProvider);
+    final livePressure = ref.watch(realtimePressureProvider);
+    final pressure = settings.enableContinuousPressure ? livePressure : 0.0;
     final isRecording = ref.watch(isRecordingProvider);
     final todayEvents = ref.watch(todayEventsProvider);
     final latest = ref.watch(latestEventProvider);
-    final settings = ref.watch(userSettingsProvider);
     final primary = Theme.of(context).colorScheme.primary;
     final accessible = settings.accessibleMode;
     final conn = ref.watch(bleConnectionStateProvider).valueOrNull ??
@@ -54,7 +55,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              isRecording ? 'Recording in progress...' : 'Press the device to record',
+              !settings.enableContinuousPressure
+                  ? 'Live pressure is off'
+                  : isRecording
+                      ? 'Recording in progress...'
+                      : 'Press the device to record',
               style: TextStyle(
                 color: primary.withOpacity(0.7),
                 fontSize: accessible ? 16 : 14,
@@ -71,6 +76,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
             if (accessible)
               _AccessibleActionGrid(
+                leftHand: settings.leftHandMode,
                 accessibleOn: settings.accessibleMode,
                 bleState: conn,
                 onToggleAccessible: () => ref
@@ -82,23 +88,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     : null,
                 onSosLongPress: _triggerSos,
               )
-            else ...[
-              _AccessibleModeButton(
-                enabled: false,
-                onPressed: () =>
-                    ref.read(userSettingsProvider.notifier).setAccessibleMode(true),
-              ),
-              const SizedBox(height: 16),
-              _ManualEntryButton(onPressed: () => _addManualEvent(context)),
-              const SizedBox(height: 16),
-              _BleConnectButton(),
-              const SizedBox(height: 16),
-              _SosButton(onLongPress: _triggerSos),
-            ],
+            else
+              ..._orderedHomeActions(settings.leftHandMode),
+            const SizedBox(height: 12),
+            const Text(
+              'SOS is experimental. In an emergency, call emergency services or contact your guardian directly. Any text must be sent by you.',
+              style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.35),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _orderedHomeActions(bool leftHand) {
+    final actions = <Widget>[
+      _AccessibleModeButton(
+        enabled: false,
+        onPressed: () => ref.read(userSettingsProvider.notifier).setAccessibleMode(true),
+      ),
+      const SizedBox(height: 16),
+      _ManualEntryButton(onPressed: () => _addManualEvent(context)),
+      const SizedBox(height: 16),
+      _BleConnectButton(),
+      const SizedBox(height: 16),
+      _SosButton(onLongPress: _triggerSos),
+    ];
+    return leftHand ? actions.reversed.toList() : actions;
   }
 
   Future<void> _addManualEvent(BuildContext context) async {
@@ -127,7 +143,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _triggerSos() async {
     HapticFeedback.heavyImpact();
-    final location = await ref.read(sosServiceProvider).trigger();
+    final location = await ref.read(sosServiceProvider).trigger(
+          guardianPhone: ref.read(userSettingsProvider).guardianPhone,
+        );
     ref.read(lastSosAlertProvider.notifier).state = SosAlert(
       time: DateTime.now(),
       location: location,
@@ -138,6 +156,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 /// Accessible：2×2 正方形动作格
 class _AccessibleActionGrid extends StatelessWidget {
+  final bool leftHand;
   final bool accessibleOn;
   final BleConnectionState bleState;
   final VoidCallback onToggleAccessible;
@@ -146,6 +165,7 @@ class _AccessibleActionGrid extends StatelessWidget {
   final VoidCallback onSosLongPress;
 
   const _AccessibleActionGrid({
+    required this.leftHand,
     required this.accessibleOn,
     required this.bleState,
     required this.onToggleAccessible,
@@ -167,41 +187,63 @@ class _AccessibleActionGrid extends StatelessWidget {
       mainAxisSpacing: 14,
       crossAxisSpacing: 14,
       childAspectRatio: 1,
-      children: [
-        _SquareTile(
-          icon: Icons.accessibility_new,
-          label: accessibleOn ? 'Accessible\nON' : 'Accessible',
-          color: AppColors.navHome,
-          filled: accessibleOn,
-          onTap: onToggleAccessible,
-        ),
-        _SquareTile(
-          icon: Icons.edit_note,
-          label: 'Manual\nEntry',
-          color: const Color(0xFFEF6C00),
-          onTap: onManualEntry,
-        ),
-        _SquareTile(
-          icon: scanning
-              ? Icons.bluetooth_searching
-              : (connected ? Icons.bluetooth_connected : Icons.bluetooth),
-          label: scanning
-              ? 'Scanning…'
-              : (connected ? 'Connected' : 'Connect\nDevice'),
-          color: AppColors.navTimeline,
-          onTap: connected ? null : onConnect,
-        ),
-        _SquareTile(
-          // Material Icons.ambulance/emergency 在 release 字体裁剪后会显示成 *
-          emoji: '🚑',
-          label: 'SOS\nHold',
-          color: AppColors.sosRed,
-          filled: true,
-          onTap: null,
-          onLongPress: onSosLongPress,
-          hint: 'Long press',
-        ),
+      children: leftHand
+          ? [
+              _sosTile(),
+              _connectTile(scanning, connected),
+              _manualTile(),
+              _accessibleTile(),
+            ]
+          : [
+        _accessibleTile(),
+        _manualTile(),
+        _connectTile(scanning, connected),
+        _sosTile(),
       ],
+    );
+  }
+
+  Widget _accessibleTile() {
+    return _SquareTile(
+      icon: Icons.accessibility_new,
+      label: accessibleOn ? 'Accessible\nON' : 'Accessible',
+      color: AppColors.navHome,
+      filled: accessibleOn,
+      onTap: onToggleAccessible,
+    );
+  }
+
+  Widget _manualTile() {
+    return _SquareTile(
+      icon: Icons.edit_note,
+      label: 'Manual\nEntry',
+      color: const Color(0xFFEF6C00),
+      onTap: onManualEntry,
+    );
+  }
+
+  Widget _connectTile(bool scanning, bool connected) {
+    return _SquareTile(
+      icon: scanning
+          ? Icons.bluetooth_searching
+          : (connected ? Icons.bluetooth_connected : Icons.bluetooth),
+      label: scanning
+          ? 'Scanning…'
+          : (connected ? 'Connected' : 'Connect\nDevice'),
+      color: AppColors.navTimeline,
+      onTap: connected ? null : onConnect,
+    );
+  }
+
+  Widget _sosTile() {
+    return _SquareTile(
+      emoji: '🚑',
+      label: 'SOS\nHold',
+      color: AppColors.sosRed,
+      filled: true,
+      onTap: null,
+      onLongPress: onSosLongPress,
+      hint: 'Long press',
     );
   }
 }

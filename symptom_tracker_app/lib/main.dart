@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';  // 状态管理
 import 'providers/ble_provider.dart';
 import 'services/storage_service.dart';
 import 'services/post_event_service.dart';
+import 'services/reminder_service.dart';
 import 'services/sos_service.dart';
 import 'app.dart';
 
@@ -17,12 +18,16 @@ void main() async {                          // async = 异步函数，内部可
   final sosService = SosService();
   await sosService.init();                   // SOS 通知渠道与权限
 
+  final reminderService = ReminderService();
+  await reminderService.init();
+
   runApp(
     ProviderScope(                           // ProviderScope = Riverpod 的全局容器，必须包在最外层
       overrides: [
         // 把已初始化的服务注入，避免重复 init
         sosServiceProvider.overrideWithValue(sosService),
         postEventServiceProvider.overrideWithValue(postEventService),
+        reminderServiceProvider.overrideWithValue(reminderService),
       ],
       child: const _AppWrapper(),
     ),

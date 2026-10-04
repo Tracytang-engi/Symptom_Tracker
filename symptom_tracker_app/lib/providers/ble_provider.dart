@@ -6,6 +6,7 @@ import '../models/pain_event.dart';
 import '../services/ble_service.dart';
 import '../services/calibration_service.dart';
 import '../services/post_event_service.dart';
+import '../services/reminder_service.dart';
 import '../services/sos_service.dart';
 import '../services/device_file_transfer.dart';
 import 'events_provider.dart';
@@ -37,6 +38,10 @@ final deviceFileTransferProvider = Provider<DeviceFileTransfer>((ref) {
 
 final postEventServiceProvider = Provider<PostEventService>((ref) {
   throw UnimplementedError('PostEventService must be overridden in main()');
+});
+
+final reminderServiceProvider = Provider<ReminderService>((ref) {
+  throw UnimplementedError('ReminderService must be overridden in main()');
 });
 
 // ─── SosService 单例 ──────────────────────────────────────────────────────────
@@ -272,7 +277,9 @@ final bleEventListenerProvider = Provider<void>((ref) {
 
       case BleEventType.sos:
         unawaited(() async {
-          final loc = await ref.read(sosServiceProvider).trigger();
+          final loc = await ref.read(sosServiceProvider).trigger(
+                guardianPhone: ref.read(userSettingsProvider).guardianPhone,
+              );
           ref.read(lastSosAlertProvider.notifier).state = SosAlert(
             time: DateTime.now(),
             location: loc,

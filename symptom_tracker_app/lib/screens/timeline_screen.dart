@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../providers/events_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/pain_event.dart';
+import '../models/symptom_profile.dart';
 import '../widgets/pain_event_card.dart';
 
 // TimelineScreen：事件时间线页面
@@ -24,6 +26,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   @override
   Widget build(BuildContext context) {
     final events = ref.watch(selectedDayEventsProvider(_selectedDay));  // Provider.family：传参获取该天事件
+    final multi = ref.watch(userSettingsProvider).multiProfileEnabled;
+    final profiles = ref.watch(profilesProvider);
     final primary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
@@ -73,10 +77,19 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                   )
                 : ListView.builder(
                     itemCount: events.length,
-                    itemBuilder: (_, i) => PainEventCard(
-                      event: events[i],
-                      onTap: () => context.push('/timeline/${events[i].id}', extra: events[i]),  // extra = 路由传递对象
-                    ),
+                    itemBuilder: (_, i) {
+                      final event = events[i];
+                      SymptomProfile? profile;
+                      for (final p in profiles) {
+                        if (p.id == event.profileId) profile = p;
+                      }
+                      return PainEventCard(
+                        event: event,
+                        profile: profile,
+                        showProfileTag: multi,
+                        onTap: () => context.push('/timeline/${event.id}', extra: event),
+                      );
+                    },
                   ),
           ),
         ],

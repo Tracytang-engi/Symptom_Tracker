@@ -43,6 +43,12 @@ void BLE_init();
 void BLE_update();
 
 /**
+ * 若 config.h 里 BATTERY_ADC_PIN >= 0，按约 30 秒上报标准电量服务。
+ * 未接线时为空操作。
+ */
+void BLE_updateBattery();
+
+/**
  * BLE_isConnected()
  * 返回当前是否有手机连接到本设备。
  */

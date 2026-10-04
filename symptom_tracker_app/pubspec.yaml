@@ -42,8 +42,20 @@ dependencies:
   # Unique ID generation
   uuid: ^4.5.1
 
+  # Optional backup server (login and restore only)
+  http: ^1.2.2
+
   # Date/time formatting
   intl: ^0.20.2
+
+  # Share exported CSV
+  share_plus: ^10.1.4
+
+  # Open the SMS app for a guardian SOS
+  url_launcher: ^6.3.1
+
+  # Scheduled daily reminder
+  timezone: ^0.10.0
 
   cupertino_icons: ^1.0.8
 

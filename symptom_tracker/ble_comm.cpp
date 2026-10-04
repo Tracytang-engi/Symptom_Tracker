@@ -48,6 +48,9 @@ static uint8_t  s_recordCmd        = 0;    // 0=无 1=开始录音 2=停止录�
 // ─── 模块内部状态（须在文件传输函数之前声明）────────────────
 static BLEServer*         s_pServer        = nullptr;
 static BLECharacteristic* s_pPressureChar  = nullptr;  // 压力值特征
+static BLECharacteristic* s_pBatteryChar   = nullptr;
+static uint8_t            s_lastBatteryPct = 255;
+static uint32_t           s_lastBatteryMs  = 0;
 static BLECharacteristic* s_pEventChar     = nullptr;  // 事件特征
 static BLECharacteristic* s_pSettingsChar  = nullptr;  // 设置写入特征
 static BLECharacteristic* s_pFileDataChar  = nullptr;  // WAV 二进制 Notify
@@ -452,6 +455,7 @@ class SettingsCallbacks : public BLECharacteristicCallbacks {
 class ServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) override {
         s_connected = true;
+        s_lastBatteryPct = 255;
         Serial.println("[BLE] 手机已连接！");
         // 等 App 完成 Notify 订阅后，由 App 主动发送 sync_events。
     }
@@ -510,12 +514,30 @@ void BLE_init() {
     );
     s_pFileDataChar->addDescriptor(new BLE2902());
 
-    // ⑧ 启动 Service
+    // ⑧ 电量：只有接了分压才创建标准 Battery Service
+#if BATTERY_ADC_PIN >= 0
+    analogReadResolution(12);
+    analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
+    BLEService* pBattery = s_pServer->createService(BLEUUID((uint16_t)0x180F));
+    s_pBatteryChar = pBattery->createCharacteristic(
+        BLEUUID((uint16_t)0x2A19),
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+    );
+    s_pBatteryChar->addDescriptor(new BLE2902());
+    pBattery->start();
+#else
+    Serial.println("[BLE] 未接电池分压，不广播电量");
+#endif
+
+    // ⑨ 启动 Service
     pService->start();
 
     // ⑨ 开始广播（让手机能扫描到本设备）
     BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
+#if BATTERY_ADC_PIN >= 0
+    pAdvertising->addServiceUUID(BLEUUID((uint16_t)0x180F));
+#endif
     pAdvertising->setScanResponse(true);
     // 设置广播间隔（20ms~40ms 是 BLE 推荐的快速发现间隔）
     pAdvertising->setMinPreferred(0x06);
@@ -524,6 +546,26 @@ void BLE_init() {
 
     Serial.println("[BLE] 初始化完成，设备名: " + String(BLE_DEVICE_NAME));
     Serial.println("[BLE] 正在广播，等待手机连接...");
+}
+
+void BLE_updateBattery() {
+#if BATTERY_ADC_PIN >= 0
+    if (!s_connected || !s_pBatteryChar) return;
+    if (s_lastBatteryPct != 255 && millis() - s_lastBatteryMs < 30000) return;
+    s_lastBatteryMs = millis();
+    // 1:1 分压：ADC 看到的是电池电压的一半。3.0V→0%，4.2V→100%。
+    uint32_t pinMv = analogReadMilliVolts(BATTERY_ADC_PIN);
+    uint32_t batMv = pinMv * 2;
+    uint8_t pct = 0;
+    if (batMv >= 4200) pct = 100;
+    else if (batMv > 3000) pct = (uint8_t)((batMv - 3000) * 100 / 1200);
+    if (pct == s_lastBatteryPct) return;
+    s_lastBatteryPct = pct;
+    s_pBatteryChar->setValue(&pct, 1);
+    s_pBatteryChar->notify();
+#else
+    (void)0;
+#endif
 }
 
 void BLE_update() {

@@ -26,6 +26,9 @@ class UserSettings {
   final bool deviceDisconnectedReminder;
   final bool allowDataExport;
   final String activeProfileId;
+  final bool multiProfileEnabled;
+  final String guardianName;
+  final String guardianPhone;
 
   /// 进入 Accessible Mode 前的字号（index），退出时恢复
   final int? preAccessibleFontSize;
@@ -52,6 +55,9 @@ class UserSettings {
     this.deviceDisconnectedReminder = true,
     this.allowDataExport = true,
     this.activeProfileId = 'default',
+    this.multiProfileEnabled = false,
+    this.guardianName = '',
+    this.guardianPhone = '',
     this.preAccessibleFontSize,
     this.preAccessibleLargeButtons,
   });
@@ -78,6 +84,9 @@ class UserSettings {
     bool? deviceDisconnectedReminder,
     bool? allowDataExport,
     String? activeProfileId,
+    bool? multiProfileEnabled,
+    String? guardianName,
+    String? guardianPhone,
     int? preAccessibleFontSize,
     bool? preAccessibleLargeButtons,
     bool clearPreAccessibleSnapshot = false,
@@ -101,6 +110,9 @@ class UserSettings {
       deviceDisconnectedReminder: deviceDisconnectedReminder ?? this.deviceDisconnectedReminder,
       allowDataExport: allowDataExport ?? this.allowDataExport,
       activeProfileId: activeProfileId ?? this.activeProfileId,
+      multiProfileEnabled: multiProfileEnabled ?? this.multiProfileEnabled,
+      guardianName: guardianName ?? this.guardianName,
+      guardianPhone: guardianPhone ?? this.guardianPhone,
       preAccessibleFontSize: clearPreAccessibleSnapshot
           ? null
           : (preAccessibleFontSize ?? this.preAccessibleFontSize),
@@ -130,6 +142,9 @@ class UserSettings {
     'deviceDisconnectedReminder': deviceDisconnectedReminder,
     'allowDataExport': allowDataExport,
     'activeProfileId': activeProfileId,
+    'multiProfileEnabled': multiProfileEnabled,
+    'guardianName': guardianName,
+    'guardianPhone': guardianPhone,
     'preAccessibleFontSize': preAccessibleFontSize,
     'preAccessibleLargeButtons': preAccessibleLargeButtons,
   };
@@ -155,6 +170,9 @@ class UserSettings {
     deviceDisconnectedReminder: json['deviceDisconnectedReminder'] as bool? ?? true,
     allowDataExport: json['allowDataExport'] as bool? ?? true,
     activeProfileId: json['activeProfileId'] as String? ?? 'default',
+    multiProfileEnabled: json['multiProfileEnabled'] as bool? ?? false,
+    guardianName: json['guardianName'] as String? ?? '',
+    guardianPhone: json['guardianPhone'] as String? ?? '',
     preAccessibleFontSize: json['preAccessibleFontSize'] as int?,
     preAccessibleLargeButtons: json['preAccessibleLargeButtons'] as bool?,
   );

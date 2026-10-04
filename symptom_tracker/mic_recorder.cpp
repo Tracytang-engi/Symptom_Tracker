@@ -270,6 +270,10 @@ bool MIC_init() {
         Serial.println("[MIC]   确认 Partition Scheme = Default 4MB with spiffs，并已 erase_flash。");
     }
 
+    // 模块 L/R 仍接在 D32。拉低后等效接地，I2S 取左声道。
+    pinMode(MIC_LR_PIN, OUTPUT);
+    digitalWrite(MIC_LR_PIN, LOW);
+
     initI2S();   // I2S 麦克风硬件照常初始化（不依赖 SPIFFS）
     Serial.println("[MIC] 麦克风初始化完成");
     return s_spiffsOk;

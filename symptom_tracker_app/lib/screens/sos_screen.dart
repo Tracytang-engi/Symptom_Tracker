@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/ble_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 
 /// Accessible Mode 底部导航的 SOS 页：大按钮一键求助
@@ -8,7 +9,9 @@ class SosScreen extends ConsumerWidget {
   const SosScreen({super.key});
 
   Future<void> _trigger(WidgetRef ref) async {
-    final location = await ref.read(sosServiceProvider).trigger();
+    final location = await ref.read(sosServiceProvider).trigger(
+          guardianPhone: ref.read(userSettingsProvider).guardianPhone,
+        );
     ref.read(lastSosAlertProvider.notifier).state = SosAlert(
       time: DateTime.now(),
       location: location,
@@ -41,9 +44,15 @@ class SosScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Tap the big button below.\nA notification will be sent with your location if available.',
+                'Experimental. In an emergency, call emergency services or contact your guardian directly.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey, height: 1.4),
+                style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'This opens a text with your location. It is not sent until you tap Send.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
               ),
               const Spacer(),
               SizedBox(

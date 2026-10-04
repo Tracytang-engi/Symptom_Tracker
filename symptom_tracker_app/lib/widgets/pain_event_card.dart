@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';            // intl = 国际化/日期格式化库
 import '../models/pain_event.dart';
+import '../models/symptom_profile.dart';
 
 // PainEventCard：时间线列表里的一张事件卡片
 class PainEventCard extends StatelessWidget {
   final PainEvent event;
   final VoidCallback? onTap;  // VoidCallback = 无参无返回值函数；? = 可为 null（不可点）
+  final SymptomProfile? profile;
+  final bool showProfileTag;
 
-  const PainEventCard({super.key, required this.event, this.onTap});
+  const PainEventCard({
+    super.key,
+    required this.event,
+    this.onTap,
+    this.profile,
+    this.showProfileTag = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +42,15 @@ class PainEventCard extends StatelessWidget {
                     timeFormat.format(event.startTime),  // .format() = 把 DateTime 格式化为字符串
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
+                  if (showProfileTag && profile != null) ...[
+                    const SizedBox(width: 8),
+                    _ProfileTag(profile: profile!),
+                  ],
+                  if (event.voiceNotePaths.isNotEmpty ||
+                      event.pendingDeviceRecPaths.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Icon(Icons.mic, size: 16, color: color),
+                  ],
                   const Spacer(),  // Spacer = 占满剩余空间，把峰值推到右边
                   _ForceChip(label: 'Peak ${event.peakForcePercent}', force: event.peakForce, color: color),
                 ],
@@ -88,6 +106,33 @@ class PainEventCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProfileTag extends StatelessWidget {
+  final SymptomProfile profile;
+  const _ProfileTag({required this.profile});
+
+  Color _parse(String hex) {
+    final cleaned = hex.replaceFirst('#', '');
+    final value = int.tryParse(cleaned, radix: 16) ?? 0x66BB6A;
+    return Color(0xFF000000 | value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _parse(profile.themeColor);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        profile.name,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }

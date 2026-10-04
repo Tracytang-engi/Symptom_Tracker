@@ -180,14 +180,15 @@
 //  INMP441 麦克风 I2S 引脚
 // ═══════════════════════════════════════════════════
 
-#define MIC_SCK_PIN   14   // I2S 位时钟（连 INMP441 SCK）
-#define MIC_WS_PIN    15   // I2S 字选择（连 INMP441 WS）
-#define MIC_SD_PIN    32   // I2S 数据输入（连 INMP441 SD）
+#define MIC_SCK_PIN   18   // I2S 位时钟（飞线到 INMP441 SCK，实际焊在 D18）
+#define MIC_WS_PIN    15   // I2S 字选择（飞线到 INMP441 WS）
+#define MIC_SD_PIN    14   // I2S 数据输入（飞线到 INMP441 SD）
+#define MIC_LR_PIN    32   // 模块 L/R 仍焊在 D32 上；输出低电平 = 左声道
 
 /**
  * MIC_I2S_SLOT_RIGHT：I2S 单声道取哪一侧槽位
- * 0 = LEFT（L/R→GND，与面包板已验证配置一致）
- * 1 = RIGHT（仅当 LEFT 长期全 0 时再试）
+ * 0 = LEFT（MIC_LR_PIN 输出低，等效 L/R 接地）
+ * 1 = RIGHT（仅当 LEFT 长期全 0 时再试，并要把 MIC_LR_PIN 改为输出高）
  */
 #define MIC_I2S_SLOT_RIGHT  0
 
@@ -264,9 +265,8 @@
 // ═══════════════════════════════════════════════════
 
 /**
- * STATUS_LED_PIN：状态灯 GPIO（低电平点亮）
- * 接线：3.3V → 220~330Ω → LED(+) → LED(-) → GPIO13
- * 勿用 5V Vin 直接灌进 GPIO。
+ * STATUS_LED_PIN：状态灯 GPIO（高电平点亮）
+ * 接线：GPIO13 → 220Ω → LED(+) → LED(-) → GND
  */
 #define STATUS_LED_PIN  13
 
@@ -275,4 +275,11 @@
 
 /** 开始/结束双闪：每次亮或灭多少毫秒（快） */
 #define STATUS_LED_FAST_MS   80
+
+/**
+ * BATTERY_ADC_PIN：电池电压采样脚。
+ * 当前 PCB 没有分压电阻，ESP32 不能直接量电池（高于 3.3V）。
+ * 保持 -1，固件不广播电量。以后若接 1:1 分压到空闲 ADC（例如 GPIO35），改成该脚号。
+ */
+#define BATTERY_ADC_PIN  -1
 

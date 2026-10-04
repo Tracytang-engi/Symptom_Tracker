@@ -3,18 +3,21 @@ import 'package:flutter/material.dart';
 import '../models/pain_event.dart';
 import '../services/calibration_service.dart';
 import '../models/device_settings.dart';
+import '../models/user_settings.dart';
 
 // PressureCurveChart：把一次事件的原始 ADC 采样序列画成折线图
 // x 轴 = 时间（秒），y 轴 = 相对力度（0~100%）
 class PressureCurveChart extends StatelessWidget {
   final PainEvent event;
   final DeviceSettings deviceSettings;
+  final DataSmoothingLevel smoothing;
   final double height;
 
   const PressureCurveChart({
     super.key,
     required this.event,
     required this.deviceSettings,
+    this.smoothing = DataSmoothingLevel.none,
     this.height = 200,
   });
 
@@ -32,7 +35,10 @@ class PressureCurveChart extends StatelessWidget {
     }
 
     // 把原始 ADC 列表映射为 0.0~1.0 的相对力度列表
-    final relatives = CalibrationService.mapSamples(event.rawSamples, deviceSettings);
+    final relatives = _smooth(
+      CalibrationService.mapSamples(event.rawSamples, deviceSettings),
+      smoothing,
+    );
 
     // 50Hz 采样 → 每个点间隔 20ms
     const intervalMs = 20.0;
@@ -100,4 +106,25 @@ class PressureCurveChart extends StatelessWidget {
       ),
     );
   }
+}
+
+List<double> _smooth(List<double> samples, DataSmoothingLevel level) {
+  final window = switch (level) {
+    DataSmoothingLevel.none => 1,
+    DataSmoothingLevel.low => 3,
+    DataSmoothingLevel.medium => 7,
+    DataSmoothingLevel.high => 15,
+  };
+  if (window <= 1 || samples.length < window) return samples;
+  final half = window ~/ 2;
+  return List<double>.generate(samples.length, (i) {
+    var sum = 0.0;
+    var n = 0;
+    for (var j = i - half; j <= i + half; j++) {
+      if (j < 0 || j >= samples.length) continue;
+      sum += samples[j];
+      n++;
+    }
+    return sum / n;
+  });
 }

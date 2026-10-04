@@ -1,9 +1,8 @@
 /**
  * status_led.cpp — 状态指示 LED（非阻塞状态机）
  *
- * 接线（低电平点亮）：
- *   3.3V → 220~330Ω → LED(+) → LED(-) → GPIO13
- *   （不要用 5V Vin 直接灌进 GPIO）
+ * 接线（高电平点亮）：
+ *   GPIO13 → 220Ω → LED(+) → LED(-) → GND
  */
 
 #include "status_led.h"
@@ -25,8 +24,8 @@ static uint32_t s_phaseStart = 0;
 static uint8_t  s_flashStep  = 0;  // 双闪步骤 0~3（亮灭亮灭），然后结束
 
 static void writeLed(bool on) {
-    // STATUS_LED_ACTIVE_LOW：on → 引脚拉低点亮
-    digitalWrite(STATUS_LED_PIN, on ? LOW : HIGH);
+    // 高电平点亮：on → HIGH
+    digitalWrite(STATUS_LED_PIN, on ? HIGH : LOW);
     s_ledOn = on;
 }
 

@@ -1,11 +1,11 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// SosService：SOS 紧急求助
 ///
-/// 第一阶段：本地高优先级通知 + GPS 坐标
-/// 第二阶段（未来）：短信/推送给监护人联系人
+/// 本机高优先级通知 + GPS。若保存了监护人号码，再打开短信并带上坐标。
 class SosService {
   final FlutterLocalNotificationsPlugin _notif =
       FlutterLocalNotificationsPlugin();
@@ -30,11 +30,25 @@ class SosService {
 
   /// 触发 SOS：获取位置（若未传入）并发送本地紧急通知。
   /// 返回实际使用的位置字符串（可能为 null）。
-  Future<String?> trigger({String? location}) async {
+  Future<String?> trigger({String? location, String? guardianPhone}) async {
     await init();
     final loc = location ?? await getCurrentLocation();
     await _sendSosNotification(loc);
+    final phone = guardianPhone?.trim() ?? '';
+    if (phone.isNotEmpty) {
+      await _openGuardianSms(phone, loc);
+    }
     return loc;
+  }
+
+  Future<void> _openGuardianSms(String phone, String? location) async {
+    final body = location != null
+        ? 'SOS from Symptom Tracker. Location: $location'
+        : 'SOS from Symptom Tracker. Location unavailable.';
+    final uri = Uri.parse('sms:$phone?body=${Uri.encodeComponent(body)}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
   }
 
   /// 获取当前 GPS 坐标，返回 "纬度,经度"；无权限或失败时返回 null

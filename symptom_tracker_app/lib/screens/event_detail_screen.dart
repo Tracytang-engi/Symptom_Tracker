@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -46,6 +48,7 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
     final live = ref.watch(eventsProvider).where((e) => e.id == _event.id);
     if (live.isNotEmpty) _event = live.first;
 
+    final userSettings = ref.watch(userSettingsProvider);
     final deviceSettings = ref.watch(deviceSettingsProvider);
     final activeDownloadPath = ref.watch(activeDeviceFileTransferPathProvider);
     final primary = Theme.of(context).colorScheme.primary;
@@ -82,7 +85,10 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
                         style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 12),
                     PressureCurveChart(
-                        event: _event, deviceSettings: deviceSettings),
+                      event: _event,
+                      deviceSettings: deviceSettings,
+                      smoothing: userSettings.dataSmoothing,
+                    ),
                   ],
                 ),
               ),
@@ -110,6 +116,28 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            if (userSettings.multiProfileEnabled)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _Section(
+                  title: 'Profile',
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: ref.watch(profilesProvider).any((p) => p.id == _event.profileId)
+                        ? _event.profileId
+                        : null,
+                    hint: const Text('Select a profile'),
+                    items: [
+                      for (final profile in ref.watch(profilesProvider))
+                        DropdownMenuItem(
+                          value: profile.id,
+                          child: Text(profile.name),
+                        ),
+                    ],
+                    onChanged: (id) => _setProfile(id),
+                  ),
+                ),
+              ),
             _Section(
               title: 'Tags',
               trailing: TextButton(
@@ -142,14 +170,16 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
             const SizedBox(height: 12),
             _Section(
               title: 'Voice Notes',
-              trailing: IconButton(
+              trailing: (userSettings.showRecordingFeature || _phoneRecording)
+                  ? IconButton(
                 tooltip: _phoneRecording ? 'Stop' : 'Record on phone',
                 icon: Icon(
                   _phoneRecording ? Icons.stop_circle : Icons.mic,
                   color: _phoneRecording ? Colors.red : primary,
                 ),
                 onPressed: _togglePhoneRecord,
-              ),
+              )
+                  : null,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -240,14 +270,35 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
   }
 
   Future<void> _togglePhoneRecord() async {
+    final settings = ref.read(userSettingsProvider);
     if (_phoneRecording) {
       final path = await _audio.stopRecording();
       setState(() => _phoneRecording = false);
       if (path == null || !mounted) return;
+      if (!settings.autoSaveRecording) {
+        final keep = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Save recording?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Discard')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            ],
+          ),
+        );
+        if (keep != true) {
+          await _audio.deleteLocal(path);
+          return;
+        }
+      }
       final paths = List<String>.from(_event.voiceNotePaths)..add(path);
       final updated = _event.copyWith(voiceNotePaths: paths);
       await ref.read(eventsProvider.notifier).updateEvent(updated);
+      if (!mounted) return;
       setState(() => _event = updated);
+      if (settings.promptTagAfterRecording) {
+        await _editTags();
+      }
     } else {
       final ok = await _audio.startRecording();
       if (!ok && mounted) {
@@ -307,6 +358,13 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
     if (mounted) setState(() => _event = updated);
   }
 
+  Future<void> _setProfile(String? profileId) async {
+    if (profileId == null) return;
+    final updated = _event.copyWith(profileId: profileId);
+    await ref.read(eventsProvider.notifier).updateEvent(updated);
+    if (mounted) setState(() => _event = updated);
+  }
+
   Future<void> _editTags() async {
     final result = await TagSelector.show(context, _event.tags);
     if (result == null || !mounted) return;
@@ -344,6 +402,12 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
       ),
     );
     if (ok == true && mounted) {
+      if (!ref.read(userSettingsProvider).keepOriginalRecording) {
+        for (final path in _event.voiceNotePaths) {
+          final f = File(path);
+          if (await f.exists()) await f.delete();
+        }
+      }
       await ref.read(eventsProvider.notifier).deleteEvent(_event.id);
       if (!mounted) return;
       Navigator.of(context).pop();

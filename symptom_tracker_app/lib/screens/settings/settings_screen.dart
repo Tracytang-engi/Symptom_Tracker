@@ -33,8 +33,9 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(icon: Icons.schedule,     label: 'Reminders',     path: '/settings/reminders',       desc: 'Daily summaries and alerts'),
 
           _SectionHeader('Privacy & Safety'),
+          _SettingsTile(icon: Icons.cloud_upload, label: 'Account & backup', path: '/settings/account',     desc: 'Optional login, backup, and recovery'),
           _SettingsTile(icon: Icons.lock,         label: 'Privacy',       path: '/settings/privacy',         desc: 'Data export and storage'),
-          _SettingsTile(icon: Icons.supervisor_account, label: 'Guardian Mode', path: '/settings/guardian', desc: 'Caregiver access and SOS'),
+          _SettingsTile(icon: Icons.supervisor_account, label: 'Guardian Mode', path: '/settings/guardian', desc: 'Experimental. You must send the text yourself'),
 
           const SizedBox(height: 20),
         ],

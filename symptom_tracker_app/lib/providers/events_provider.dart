@@ -45,7 +45,7 @@ final eventsProvider =
 
 // 今日事件列表
 final todayEventsProvider = Provider<List<PainEvent>>((ref) {
-  final events = ref.watch(eventsProvider);  // ref.watch = 监听 eventsProvider，事件增删时自动重算
+  final events = ref.watch(profileEventsProvider);
   final today = DateTime.now();
   return events.where((e) {
     return e.startTime.year == today.year &&
@@ -56,14 +56,14 @@ final todayEventsProvider = Provider<List<PainEvent>>((ref) {
 
 // 最近一条事件（用于首页"最后一次发作"摘要）
 final latestEventProvider = Provider<PainEvent?>((ref) {   // PainEvent? = 可能为 null（没有记录时）
-  final events = ref.watch(eventsProvider);
+  final events = ref.watch(profileEventsProvider);
   return events.isEmpty ? null : events.first;
 });
 
 // Provider.family = 带参数的 Provider；参数是日期，返回该日期的事件
 final selectedDayEventsProvider =
     Provider.family<List<PainEvent>, DateTime>((ref, day) {
-  final events = ref.watch(eventsProvider);
+  final events = ref.watch(profileEventsProvider);
   return events.where((e) {
     return e.startTime.year == day.year &&
         e.startTime.month == day.month &&
@@ -72,8 +72,16 @@ final selectedDayEventsProvider =
 });
 
 // 过去 7 天的事件（统计页用）
-final last7DaysEventsProvider = Provider<List<PainEvent>>((ref) {
+/// 当前症状档案下的事件。时间线、首页和统计都读这份列表。
+final profileEventsProvider = Provider<List<PainEvent>>((ref) {
   final events = ref.watch(eventsProvider);
+  final settings = ref.watch(userSettingsProvider);
+  if (settings.multiProfileEnabled) return events;
+  return events.where((e) => e.profileId == settings.activeProfileId).toList();
+});
+
+final last7DaysEventsProvider = Provider<List<PainEvent>>((ref) {
+  final events = ref.watch(profileEventsProvider);
   final cutoff = DateTime.now().subtract(const Duration(days: 7));  // .subtract() = 日期减法
   return events.where((e) => e.startTime.isAfter(cutoff)).toList();
 });

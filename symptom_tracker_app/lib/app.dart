@@ -21,6 +21,12 @@ import 'screens/settings/post_event_settings_screen.dart';
 import 'screens/settings/ble_settings_screen.dart';
 import 'screens/settings/symptom_profile_screen.dart';
 import 'screens/settings/accessibility_screen.dart';
+import 'screens/settings/privacy_screen.dart';
+import 'screens/settings/reminders_screen.dart';
+import 'screens/settings/guardian_screen.dart';
+import 'screens/settings/account_screen.dart';
+import 'services/ble_service.dart';
+import 'services/reminder_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/tag_selector.dart';
 
@@ -66,6 +72,7 @@ final _router = GoRouter(
             GoRoute(path: 'reminders', parentNavigatorKey: _rootNavKey, builder: (_, __) => const RemindersScreen()),
             GoRoute(path: 'privacy', parentNavigatorKey: _rootNavKey, builder: (_, __) => const PrivacyScreen()),
             GoRoute(path: 'guardian', parentNavigatorKey: _rootNavKey, builder: (_, __) => const GuardianModeScreen()),
+            GoRoute(path: 'account', parentNavigatorKey: _rootNavKey, builder: (_, __) => const AccountScreen()),
           ],
         ),
       ],
@@ -90,6 +97,16 @@ class _ShellScaffoldState extends ConsumerState<_ShellScaffold> {
   void initState() {
     super.initState();
     ref.read(bleEventListenerProvider);
+    final reminders = ref.read(reminderServiceProvider);
+    reminders.onOpenPayload = (payload) {
+      if (payload == ReminderService.timelinePayload) {
+        _router.go('/timeline');
+      }
+    };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      reminders.consumeLaunchNotification();
+      reminders.syncDaily(ref.read(userSettingsProvider));
+    });
   }
 
   /// 根据当前路由同步底部栏高亮（含从 Home 点 today episodes 跳转 Timeline）
@@ -107,8 +124,11 @@ class _ShellScaffoldState extends ConsumerState<_ShellScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final accessible = ref.watch(userSettingsProvider).accessibleMode;
-    final routes = accessible ? _routesAccessible : _routesNormal;
+    final settings = ref.watch(userSettingsProvider);
+    final accessible = settings.accessibleMode;
+    final leftHand = settings.leftHandMode;
+    final baseRoutes = accessible ? _routesAccessible : _routesNormal;
+    final routes = leftHand ? baseRoutes.reversed.toList() : baseRoutes;
     final location = GoRouterState.of(context).uri.path;
     final safeIndex = _indexForLocation(location, routes);
 
@@ -167,6 +187,27 @@ class _ShellScaffoldState extends ConsumerState<_ShellScaffold> {
     });
 
     // 设备语音录完提示（会自动 BLE 下载并挂到对应发作）
+    ref.listen(userSettingsProvider, (prev, next) {
+      ref.read(reminderServiceProvider).syncDaily(next);
+    });
+
+    ref.listen(bleConnectionStateProvider, (prev, next) {
+      final was = prev?.valueOrNull;
+      final now = next.valueOrNull;
+      if (was == BleConnectionState.connected &&
+          now == BleConnectionState.disconnected &&
+          ref.read(userSettingsProvider).deviceDisconnectedReminder) {
+        ref.read(reminderServiceProvider).notifyDisconnected();
+      }
+    });
+
+    ref.listen(bleBatteryProvider, (prev, next) {
+      final pct = next.valueOrNull;
+      if (pct == null) return;
+      if (!ref.read(userSettingsProvider).deviceLowBatteryReminder) return;
+      ref.read(reminderServiceProvider).notifyLowBattery(pct);
+    });
+
     ref.listen<DeviceRecDone?>(lastDeviceRecDoneProvider, (prev, next) {
       if (next == null) return;
       final nav = _rootNavKey.currentContext;
@@ -191,43 +232,42 @@ class _ShellScaffoldState extends ConsumerState<_ShellScaffold> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: safeIndex,
         onDestinationSelected: (i) => context.go(routes[i]),
-        destinations: accessible
-            ? [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined, color: AppColors.navHome.withOpacity(0.7), size: 30),
-                  selectedIcon: const Icon(Icons.home, color: AppColors.navHome, size: 32),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.timeline_outlined, color: AppColors.navTimeline.withOpacity(0.7), size: 30),
-                  selectedIcon: const Icon(Icons.timeline, color: AppColors.navTimeline, size: 32),
-                  label: 'Timeline',
-                ),
-              ]
-            : const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined, color: AppColors.navHome),
-                  selectedIcon: Icon(Icons.home, color: AppColors.navHome),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.timeline_outlined, color: AppColors.navTimeline),
-                  selectedIcon: Icon(Icons.timeline, color: AppColors.navTimeline),
-                  label: 'Timeline',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.bar_chart_outlined, color: AppColors.navStats),
-                  selectedIcon: Icon(Icons.bar_chart, color: AppColors.navStats),
-                  label: 'Stats',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.settings_outlined, color: AppColors.navSettings),
-                  selectedIcon: Icon(Icons.settings, color: AppColors.navSettings),
-                  label: 'Settings',
-                ),
-              ],
+        destinations: [
+          for (final route in routes) _destinationFor(route, accessible),
+        ],
       ),
     );
+  }
+}
+
+NavigationDestination _destinationFor(String route, bool accessible) {
+  final size = accessible ? 30.0 : 24.0;
+  final selectedSize = accessible ? 32.0 : 24.0;
+  switch (route) {
+    case '/':
+      return NavigationDestination(
+        icon: Icon(Icons.home_outlined, color: AppColors.navHome.withOpacity(0.7), size: size),
+        selectedIcon: Icon(Icons.home, color: AppColors.navHome, size: selectedSize),
+        label: 'Home',
+      );
+    case '/timeline':
+      return NavigationDestination(
+        icon: Icon(Icons.timeline_outlined, color: AppColors.navTimeline.withOpacity(0.7), size: size),
+        selectedIcon: Icon(Icons.timeline, color: AppColors.navTimeline, size: selectedSize),
+        label: 'Timeline',
+      );
+    case '/stats':
+      return NavigationDestination(
+        icon: Icon(Icons.bar_chart_outlined, color: AppColors.navStats.withOpacity(0.7), size: size),
+        selectedIcon: Icon(Icons.bar_chart, color: AppColors.navStats, size: selectedSize),
+        label: 'Stats',
+      );
+    default:
+      return NavigationDestination(
+        icon: Icon(Icons.settings_outlined, color: AppColors.navSettings.withOpacity(0.7), size: size),
+        selectedIcon: Icon(Icons.settings, color: AppColors.navSettings, size: selectedSize),
+        label: 'Settings',
+      );
   }
 }
 

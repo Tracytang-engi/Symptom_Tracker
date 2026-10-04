@@ -56,6 +56,10 @@ static void notifyRecordingDone() {
 
 // ─── setup()：上电后执行一次 ────────────────────────────────
 void setup() {
+    // 马达基极在 GPIO27。复位后若引脚悬空，三极管会导通。
+    pinMode(MOTOR_PIN, OUTPUT);
+    digitalWrite(MOTOR_PIN, LOW);
+
     // 初始化串口（波特率 115200，与 Serial Monitor 保持一致）
     Serial.begin(115200);
     delay(500);  // 等待 Serial 稳定，确保后续日志能正常输出
@@ -178,6 +182,7 @@ void loop() {
 
     // ⑨ 处理 BLE 连接/断开事件（断开后自动重新广播）
     BLE_update();
+    BLE_updateBattery();
 
     // ⑩ 发送实时压力值（BLE Notify + Serial 打印）
     //    仅在按压期间发送，减少无效流量

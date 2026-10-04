@@ -146,6 +146,12 @@ class ProfilesNotifier extends StateNotifier<List<SymptomProfile>> {
         ? state.map((p) => p.id == profile.id ? profile : p).toList()
         : [...state, profile];
   }
+
+  Future<void> delete(String id) async {
+    if (state.length <= 1) return;
+    await _storage.deleteProfile(id);
+    state = state.where((p) => p.id != id).toList();
+  }
 }
 
 final profilesProvider =

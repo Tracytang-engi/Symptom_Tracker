@@ -19,6 +19,7 @@ class StorageService {
   static const _deviceBox   = 'device';
   static const _profilesBox = 'profiles';
   static const _tagsBox     = 'tags';
+  static const _accountBox  = 'account';
   static const _settingsKey = 'user';    // 用户设置在 Box 里的键名
   static const _deviceKey   = 'device';
 
@@ -33,6 +34,7 @@ class StorageService {
       Hive.openBox<Map>(_deviceBox),
       Hive.openBox<Map>(_profilesBox),
       Hive.openBox(_tagsBox),            // 不指定类型 = 存任意类型
+      Hive.openBox<String>(_accountBox),
     ]);
     await _seedDefaultsIfEmpty();        // 首次启动时写入默认数据
   }
@@ -133,6 +135,10 @@ class StorageService {
     await _profilesBoxRef.put(profile.id, profile.toJson());
   }
 
+  Future<void> deleteProfile(String id) async {
+    await _profilesBoxRef.delete(id);
+  }
+
   // ─── 标签 ────────────────────────────────────────────────────────────────────
 
   Box get _tagsBoxRef => Hive.box(_tagsBox);
@@ -149,6 +155,22 @@ class StorageService {
     for (final tag in tags) {
       await _tagsBoxRef.add(tag.toJson());
     }
+  }
+
+  // ─── 可选账号（只存邮箱和登录令牌，不存密码）────────────────────────────────
+
+  Box<String> get _account => Hive.box<String>(_accountBox);
+
+  String? get accountEmail => _account.get('email');
+  String? get accountToken => _account.get('token');
+
+  Future<void> saveAccount({required String email, required String token}) async {
+    await _account.put('email', email);
+    await _account.put('token', token);
+  }
+
+  Future<void> clearAccount() async {
+    await _account.clear();
   }
 
   // ─── 导出 ────────────────────────────────────────────────────────────────────
