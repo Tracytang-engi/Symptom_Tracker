@@ -1,0 +1,80 @@
+workflows:
+  ios-app-store:
+    name: Symptom Tracker - App Store
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    working_directory: symptom_tracker_app
+    integrations:
+      app_store_connect: symptom-tracker
+    environment:
+      flutter: 3.41.5
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.symptomtracker.symptomTrackerApp
+      groups:
+        - symptom_tracker_release
+    scripts:
+      - name: Check release configuration
+        script: |
+          set -euo pipefail
+          : "${APP_STORE_APPLE_ID:?Set APP_STORE_APPLE_ID in symptom_tracker_release}"
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import urllib.parse
+          import urllib.request
+          source = pathlib.Path('lib/backup_config.dart').read_text()
+          match = re.search(r"const backupApiBaseUrl\s*=\s*'([^']*)'", source)
+          url = match.group(1) if match else ''
+          parsed = urllib.parse.urlparse(url)
+          if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
+              raise SystemExit('Set the public HTTPS backupApiBaseUrl before uploading a release.')
+          with urllib.request.urlopen(url.rstrip('/') + '/privacy', timeout=180) as response:
+              policy = response.read().decode('utf-8')
+          if 'Symptom Tracker Privacy Policy' not in policy:
+              raise SystemExit('Deploy the privacy policy to Render before uploading a release.')
+          PY
+      - name: Install Flutter dependencies and generate Podfile on macOS
+        script: |
+          set -euo pipefail
+          flutter config --no-enable-swift-package-manager
+          flutter pub get
+          test -f ios/Podfile
+      - name: Analyze and test
+        script: |
+          set -euo pipefail
+          flutter analyze --no-pub --no-fatal-infos
+          flutter test --no-pub
+      - name: Install CocoaPods dependencies
+        script: |
+          set -euo pipefail
+          cd ios
+          pod install
+      - name: Apply signing profiles
+        script: xcode-project use-profiles
+      - name: Build signed IPA
+        script: |
+          set -euo pipefail
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          if ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo 'Apple did not return a numeric build number. Check the app record and API access.'
+            exit 1
+          fi
+          NEXT_BUILD_NUMBER=$((10#$LATEST_BUILD_NUMBER + 1))
+          flutter build ipa --release --no-pub \
+            --build-number="$NEXT_BUILD_NUMBER" \
+            --export-options-plist=/Users/builder/export_options.plist
+      - name: Check bundled privacy manifest
+        script: |
+          set -euo pipefail
+          plutil -lint build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/PrivacyInfo.xcprivacy
+    artifacts:
+      - symptom_tracker_app/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
