@@ -1,4 +1,28 @@
 workflows:
+  ipad-store-screenshots:
+    name: SensaTrace - iPad Screenshots
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    working_directory: symptom_tracker_app
+    environment:
+      flutter: 3.41.5
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install screenshot dependencies
+        script: |
+          set -euo pipefail
+          flutter config --no-enable-swift-package-manager
+          flutter pub get
+          cd ios
+          pod install
+      - name: Capture iPad simulator screenshots
+        script: python3 tool/ipad_screenshots.py
+    artifacts:
+      - /tmp/sensatrace-ipad-screenshots/*.png
+      - /tmp/sensatrace-ipad-screenshots/*.jpg
+      - /tmp/sensatrace-ipad-screenshots/*.zip
+      - /tmp/xcodebuild_logs/*.log
   ios-app-store:
     name: Symptom Tracker - App Store
     instance_type: mac_mini_m2
