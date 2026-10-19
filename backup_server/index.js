@@ -22,6 +22,39 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/support', (_req, res) => {
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SensaTrace Support</title>
+  <style>
+    body { max-width: 760px; margin: 48px auto; padding: 0 20px; font: 16px/1.6 system-ui, sans-serif; color: #17252a; }
+    h1, h2 { line-height: 1.25; }
+    h2 { margin-top: 28px; font-size: 1.15rem; }
+    a { color: #006b70; overflow-wrap: anywhere; }
+    a:focus-visible { outline: 2px solid #006b70; outline-offset: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SensaTrace Support</h1>
+    <p>For help with SensaTrace, including recording, device connection, accounts or backups, email <a href="mailto:SensaTrace@proton.me">SensaTrace@proton.me</a>.</p>
+    <p>Please include your app version, iPhone or iPad model, iOS version and a description of the problem. Do not send passwords, health records or voice recordings. Remove personal information from screenshots before sending them.</p>
+    <h2>Accounts and backups</h2>
+    <p>Everyday records stay on your phone by default. Cloud backup is optional and manual. The backup service may take a few minutes to wake up after inactivity; keep the app open while your backup completes.</p>
+    <h2>Delete your account</h2>
+    <p>In the app, go to Settings &gt; Account &amp; backup &gt; Delete account. This removes your account and cloud backup. Records stored on your phone are retained. If you cannot access your account, contact support for help.</p>
+    <h2>Safety</h2>
+    <p>SensaTrace is a recording tool and does not diagnose or treat any condition. SOS only opens a text-message draft, which you must send yourself. It does not automatically call emergency services.</p>
+    <p>This support inbox is not an emergency service. In an emergency, call your local emergency number or contact your caregiver directly.</p>
+    <p><a href="/privacy">Privacy policy</a></p>
+  </main>
+</body>
+</html>`);
+});
+
 app.get('/privacy', (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html lang="en">
