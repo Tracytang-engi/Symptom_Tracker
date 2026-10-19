@@ -57,7 +57,11 @@ workflows:
       - name: Build signed IPA
         script: |
           set -euo pipefail
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID")
+          # A successful query with no builds returns empty stdout for a new app.
+          if [[ -z "$LATEST_BUILD_NUMBER" ]]; then
+            LATEST_BUILD_NUMBER=0
+          fi
           if ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
             echo 'Apple did not return a numeric build number. Check the app record and API access.'
             exit 1
