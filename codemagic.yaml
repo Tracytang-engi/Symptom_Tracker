@@ -74,8 +74,21 @@ workflows:
         script: |
           set -euo pipefail
           plutil -lint build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/PrivacyInfo.xcprivacy
+      - name: Prepare IPA for publishing
+        script: |
+          set -euo pipefail
+          shopt -s nullglob
+          IPA_FILES=("$PWD"/build/ios/ipa/*.ipa)
+          if [[ ${#IPA_FILES[@]} -ne 1 || ! -s "${IPA_FILES[0]}" ]]; then
+            echo "Expected one non-empty IPA in $PWD/build/ios/ipa."
+            exit 1
+          fi
+          # Use an absolute staging path independent of artifact working-directory rules.
+          mkdir -p /tmp/sensatrace-artifacts
+          cp "${IPA_FILES[0]}" /tmp/sensatrace-artifacts/SensaTrace.ipa
+          ls -lh /tmp/sensatrace-artifacts/SensaTrace.ipa
     artifacts:
-      - symptom_tracker_app/build/ios/ipa/*.ipa
+      - /tmp/sensatrace-artifacts/SensaTrace.ipa
       - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
