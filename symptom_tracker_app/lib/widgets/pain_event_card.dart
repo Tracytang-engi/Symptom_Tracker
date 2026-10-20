@@ -52,13 +52,14 @@ class PainEventCard extends StatelessWidget {
                     Icon(Icons.mic, size: 16, color: color),
                   ],
                   const Spacer(),  // Spacer = 占满剩余空间，把峰值推到右边
-                  _ForceChip(label: 'Peak ${event.peakForcePercent}', force: event.peakForce, color: color),
+                  if (event.hasPressureData)
+                    _ForceChip(label: 'Peak ${event.peakForcePercent}', force: event.peakForce, color: color),
                 ],
               ),
               const SizedBox(height: 10),
 
               // 峰值进度条
-              ClipRRect(                     // ClipRRect = 把子 Widget 裁剪为圆角矩形
+              if (event.hasPressureData) ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: event.peakForce,    // 0.0~1.0 对应 0%~100%
@@ -74,7 +75,8 @@ class PainEventCard extends StatelessWidget {
                 children: [
                   _StatItem(icon: Icons.timer, label: event.formattedDuration),
                   const SizedBox(width: 16),
-                  _StatItem(icon: Icons.show_chart, label: 'Avg ${event.meanForcePercent}'),
+                  if (event.hasPressureData)
+                    _StatItem(icon: Icons.show_chart, label: 'Avg ${event.meanForcePercent}'),
                   const Spacer(),
                   if (!event.fromDevice)     // 手动录入时显示 "Manual" 标签
                     Container(

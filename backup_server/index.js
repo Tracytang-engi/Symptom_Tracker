@@ -9,6 +9,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-me';
 const databaseUrl = process.env.DATABASE_URL;
 const pool = new Pool({
   connectionString: databaseUrl,
+  connectionTimeoutMillis: 10000,
+  statement_timeout: 25000,
+  query_timeout: 30000,
   // 带 render.com 的是外网地址，要 SSL。同一账号里 Web Service 用的内网地址不用。
   ssl: databaseUrl && databaseUrl.includes('render.com')
     ? { rejectUnauthorized: false }
@@ -17,6 +20,12 @@ const pool = new Pool({
 
 const app = express();
 app.use(express.json({ limit: '80mb' }));
+
+// Express 4 does not forward rejected async handlers to the error middleware.
+const asyncRoute = (handler) => (req, res, next) =>
+  Promise.resolve().then(() => handler(req, res, next)).catch(next);
+
+pool.on('error', (err) => console.error('Idle database connection error:', err.message));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
@@ -117,7 +126,7 @@ function auth(req, res, next) {
   }
 }
 
-app.post('/auth/register', async (req, res) => {
+app.post('/auth/register', asyncRoute(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   if (!email.includes('@') || password.length < 6) {
@@ -135,9 +144,9 @@ app.post('/auth/register', async (req, res) => {
     throw err;
   }
   res.json({ token: signToken({ id, email }) });
-});
+}));
 
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', asyncRoute(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   const result = await pool.query('SELECT id, email, password_hash FROM symptom.users WHERE email = $1', [email]);
@@ -146,9 +155,9 @@ app.post('/auth/login', async (req, res) => {
     return res.status(401).json({ error: 'Email or password is wrong.' });
   }
   res.json({ token: signToken(user) });
-});
+}));
 
-app.put('/backup', auth, async (req, res) => {
+app.put('/backup', auth, asyncRoute(async (req, res) => {
   await pool.query(
     `INSERT INTO symptom.backups (user_id, payload, updated_at)
      VALUES ($1, $2, now())
@@ -156,15 +165,15 @@ app.put('/backup', auth, async (req, res) => {
     [req.user.sub, JSON.stringify(req.body)],
   );
   res.json({ ok: true });
-});
+}));
 
-app.get('/backup', auth, async (req, res) => {
+app.get('/backup', auth, asyncRoute(async (req, res) => {
   const result = await pool.query('SELECT payload FROM symptom.backups WHERE user_id = $1', [req.user.sub]);
   if (!result.rows[0]) return res.status(404).json({ error: 'No backup stored for this account.' });
   res.type('json').send(result.rows[0].payload);
-});
+}));
 
-app.delete('/account', auth, async (req, res, next) => {
+app.delete('/account', auth, asyncRoute(async (req, res, next) => {
   let client;
   try {
     client = await pool.connect();
@@ -174,15 +183,20 @@ app.delete('/account', auth, async (req, res, next) => {
     await client.query('COMMIT');
     res.json({ ok: true });
   } catch (err) {
-    if (client) await client.query('ROLLBACK');
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch (_) { /* Preserve the original error. */ }
+    }
     next(err);
   } finally {
     if (client) client.release();
   }
-});
+}));
 
 app.use((err, _req, res, _next) => {
   console.error(err);
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Backup is too large for the server.' });
+  }
   res.status(500).json({ error: 'Server error.' });
 });
 

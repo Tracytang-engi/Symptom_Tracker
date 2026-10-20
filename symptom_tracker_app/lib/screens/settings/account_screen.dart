@@ -18,6 +18,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   bool _busy = false;
   bool _backingUp = false;
   String _backupStep = 'Waking the server…';
+  String? _backupResult;
 
   @override
   void initState() {
@@ -55,16 +56,20 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Future<void> _backupNow() async {
     setState(() {
       _backingUp = true;
+      _backupResult = null;
       _backupStep = 'Preparing the backup…';
     });
     try {
       await _backup.uploadAfterWake(onStep: (step) {
         if (mounted) setState(() => _backupStep = step);
       });
-      _snack('Backup saved.');
+      if (mounted) setState(() => _backupResult = _backupStep);
+      _snack(_backupStep);
     } on BackupException catch (e) {
+      if (mounted) setState(() => _backupResult = e.message);
       _snack(e.message);
     } catch (_) {
+      if (mounted) setState(() => _backupResult = 'Backup failed. Check your connection and try again. Local records are unchanged.');
       _snack('Could not reach the backup server.');
     } finally {
       if (mounted) setState(() => _backingUp = false);
@@ -229,9 +234,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Backup takes about 2 minutes. The server may be asleep. '
-                      'The app wakes it, then uploads again after 1 minute and after 2 minutes. '
-                      'Keep this screen open until it finishes.',
+                      'Uploads are scheduled after 1 and 2 minutes. '
+                      'Slow requests can take up to about 5 minutes in total. '
+                      'Keep the app open and the phone unlocked.',
                       style: TextStyle(color: Colors.grey),
                     ),
                     TextButton(
@@ -251,6 +256,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     ),
                   ],
                   const Divider(height: 32),
+                  if (_backupResult != null) ...[
+                    Text(_backupResult!, key: const ValueKey('backup-result')),
+                    const SizedBox(height: 16),
+                  ],
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.restore),
@@ -273,12 +282,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'This takes about 2 minutes. The server may be asleep. '
-            'The app has sent a wake-up, then uploads again after 1 minute and after 2 minutes.',
+            'Uploads are scheduled after 1 and 2 minutes. '
+            'Slow requests can take up to about 5 minutes in total.',
           ),
           const SizedBox(height: 8),
           const Text(
-            'Keep this screen open.',
+            'Keep the app open and the phone unlocked. Switching apps can pause the backup.',
             style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 32),

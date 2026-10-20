@@ -246,7 +246,8 @@ class _DayIntensityChartState extends State<_DayIntensityChart> {
   Widget build(BuildContext context) {
     final color = widget.color;
     // 按时间排序，直接 (时刻 → 峰值%) plot，不做曲线插值（曲线贝塞尔会在 x 上走回头）
-    final sorted = [...widget.events]..sort((a, b) => a.startTime.compareTo(b.startTime));
+    final sorted = widget.events.where((e) => e.hasPressureData).toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
     final spots = <FlSpot>[];
     for (final e in sorted) {
       var x = _hourOfDay(e.startTime);

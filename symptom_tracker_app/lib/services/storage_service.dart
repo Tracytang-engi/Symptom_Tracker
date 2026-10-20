@@ -182,7 +182,7 @@ class StorageService {
     for (final e in events) {
       sb.writeln(
           '${e.id},${e.startTime.toIso8601String()},${e.endTime.toIso8601String()},'
-          '${e.durationMs},${e.meanForce.toStringAsFixed(3)},${e.peakForce.toStringAsFixed(3)},'  // .toStringAsFixed(3) = 保留3位小数
+          '${e.durationMs},${e.hasPressureData ? e.meanForce.toStringAsFixed(3) : ''},${e.hasPressureData ? e.peakForce.toStringAsFixed(3) : ''},'
           '"${e.tags.join(';')}","${e.textNote ?? ''}",${e.fromDevice}');  // .join(';') = 列表元素用分号连接
     }
     return sb.toString();

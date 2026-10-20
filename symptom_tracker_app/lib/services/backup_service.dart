@@ -24,8 +24,37 @@ enum _PutResult { ok, retry, fatal }
 /// 只在用户主动备份或找回时访问服务器。打开应用不会从这里拉数据。
 class BackupService {
   final StorageService storage;
+  final http.Client Function() _clientFactory;
+  final Duration firstUploadAt;
+  final Duration secondUploadAt;
+  final Duration firstTimeout;
+  final Duration secondTimeout;
+  String _lastUploadError = 'The server did not confirm the backup.';
 
-  BackupService(this.storage);
+  BackupService(
+    this.storage, {
+    http.Client Function()? clientFactory,
+    this.firstUploadAt = const Duration(minutes: 1),
+    this.secondUploadAt = const Duration(minutes: 2),
+    this.firstTimeout = const Duration(seconds: 50),
+    this.secondTimeout = const Duration(minutes: 3),
+  }) : _clientFactory = clientFactory ?? http.Client.new;
+
+  // Closing the per-request client also aborts an HTTP request after timeout.
+  Future<http.Response> _request(
+    Future<http.Response> Function(http.Client client) send,
+    Duration timeout,
+  ) async {
+    final client = _clientFactory();
+    try {
+      return await send(client).timeout(timeout);
+    } on TimeoutException {
+      throw BackupException(
+          'Server request timed out. Check your connection and try again.');
+    } finally {
+      client.close();
+    }
+  }
 
   bool get isConfigured => backupApiBaseUrl.isNotEmpty;
 
@@ -46,10 +75,12 @@ class BackupService {
       throw BackupException('Log in before deleting your account.');
     }
 
-    final response = await http.delete(
-      _uri('/account'),
-      headers: {'Authorization': 'Bearer $token'},
-    ).timeout(const Duration(minutes: 1));
+    final response = await _request(
+        (client) => client.delete(
+              _uri('/account'),
+              headers: {'Authorization': 'Bearer $token'},
+            ),
+        const Duration(minutes: 1));
     if (response.statusCode != 200) {
       throw BackupException(_errorMessage(response));
     }
@@ -72,66 +103,119 @@ class BackupService {
     }
 
     onStep?.call('Preparing the backup…');
-    final body = jsonEncode(await _buildPayload());
-    final started = DateTime.now();
-    onStep?.call('Waking the server…');
-    unawaited(_wake());
+    final body =
+        jsonEncode(await _buildPayload().timeout(const Duration(seconds: 30)));
+    final started = Stopwatch()..start();
+    var wakeStatus = 'Waking the server';
+    unawaited(_wake().then((status) => wakeStatus = status));
 
-    await _waitUntil(started, const Duration(minutes: 1));
-    onStep?.call('Uploading…');
-    final first = await _putBackup(body, timeout: const Duration(seconds: 50));
+    await _waitUntil(
+        started, firstUploadAt, onStep, () => '$wakeStatus. Upload 1/2');
+    final first =
+        await _uploadWithProgress(body, token, 1, firstTimeout, onStep);
     if (first == _PutResult.fatal) {
       throw BackupException('Login expired. Enter your password again.');
     }
 
-    await _waitUntil(started, const Duration(minutes: 2));
-    onStep?.call('Uploading again…');
-    final second = await _putBackup(body, timeout: const Duration(minutes: 3));
-    if (first == _PutResult.ok || second == _PutResult.ok) return;
+    await _waitUntil(
+        started,
+        secondUploadAt,
+        onStep,
+        () => first == _PutResult.ok
+            ? 'Backup saved on attempt 1. Scheduled upload 2/2'
+            : 'Attempt 1 failed: $_lastUploadError Upload 2/2');
+    final second =
+        await _uploadWithProgress(body, token, 2, secondTimeout, onStep);
+    if (second == _PutResult.ok) {
+      onStep?.call('Backup saved. Server confirmed receipt.');
+      return;
+    }
+    if (first == _PutResult.ok) {
+      onStep?.call(
+          'Backup saved on attempt 1. The second upload was not confirmed.');
+      return;
+    }
     if (second == _PutResult.fatal) {
       throw BackupException('Login expired. Enter your password again.');
     }
-    throw BackupException('The backup server did not wake up. Try again.');
+    throw BackupException(
+        'Backup failed after 2 attempts. $_lastUploadError Your local records are unchanged.');
   }
 
-  Future<void> _wake() async {
+  Future<String> _wake() async {
     try {
-      await http.get(_uri('/health')).timeout(const Duration(seconds: 30));
-    } catch (_) {}
+      final response = await _request(
+          (client) => client.get(_uri('/health')), const Duration(seconds: 30));
+      return response.statusCode == 200
+          ? 'Server is awake'
+          : 'Wake-up returned HTTP ${response.statusCode}';
+    } catch (_) {
+      return 'Wake-up not confirmed; upload will still be attempted';
+    }
   }
 
-  Future<void> _waitUntil(DateTime started, Duration mark) async {
-    final left = mark - DateTime.now().difference(started);
-    if (left > Duration.zero) await Future<void>.delayed(left);
+  Future<void> _waitUntil(Stopwatch started, Duration mark,
+      void Function(String)? onStep, String Function() label) async {
+    while (started.elapsed < mark) {
+      final left = mark - started.elapsed;
+      onStep?.call('${label()} in ${(left.inMilliseconds / 1000).ceil()} s.');
+      await Future<void>.delayed(left < const Duration(seconds: 1)
+          ? left
+          : const Duration(seconds: 1));
+    }
   }
 
-  Future<_PutResult> _putBackup(String body,
+  Future<_PutResult> _uploadWithProgress(String body, String token, int attempt,
+      Duration timeout, void Function(String)? onStep) async {
+    final watch = Stopwatch()..start();
+    void report() => onStep?.call(
+        'Uploading $attempt/2 - ${watch.elapsed.inSeconds} s elapsed '
+        '(timeout ${timeout.inSeconds} s). Waiting for server confirmation.');
+    report();
+    final ticker = Timer.periodic(const Duration(seconds: 1), (_) => report());
+    try {
+      return await _putBackup(body, token, timeout: timeout);
+    } finally {
+      ticker.cancel();
+      watch.stop();
+    }
+  }
+
+  Future<_PutResult> _putBackup(String body, String token,
       {required Duration timeout}) async {
-    final token = storage.accountToken;
-    if (token == null || token.isEmpty) return _PutResult.fatal;
     try {
-      final response = await http
-          .put(
-            _uri('/backup'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
-            body: body,
-          )
-          .timeout(timeout);
+      final response = await _request(
+          (client) => client.put(
+                _uri('/backup'),
+                headers: {
+                  'Authorization': 'Bearer $token',
+                  'Content-Type': 'application/json',
+                },
+                body: body,
+              ),
+          timeout);
       if (response.statusCode == 401) return _PutResult.fatal;
-      if (response.statusCode != 200) return _PutResult.retry;
+      if (response.statusCode != 200) {
+        _lastUploadError = response.statusCode == 413
+            ? 'Backup is too large for the server.'
+            : 'Server returned HTTP ${response.statusCode}.';
+        return _PutResult.retry;
+      }
       final decoded = jsonDecode(response.body);
       if (decoded is Map && decoded['ok'] == true) return _PutResult.ok;
+      _lastUploadError = 'Server did not confirm receipt.';
       return _PutResult.retry;
-    } on TimeoutException {
+    } on BackupException catch (error) {
+      _lastUploadError = error.message;
       return _PutResult.retry;
     } on SocketException {
+      _lastUploadError = 'Network connection failed.';
       return _PutResult.retry;
     } on http.ClientException {
+      _lastUploadError = 'Network connection failed.';
       return _PutResult.retry;
     } on FormatException {
+      _lastUploadError = 'Server returned an invalid response.';
       return _PutResult.retry;
     }
   }
@@ -140,10 +224,12 @@ class BackupService {
   Future<void> restore(
       {required String email, required String password}) async {
     final token = await login(email, password);
-    final response = await http.get(
-      _uri('/backup'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
+    final response = await _request(
+        (client) => client.get(
+              _uri('/backup'),
+              headers: {'Authorization': 'Bearer $token'},
+            ),
+        const Duration(minutes: 3));
     if (response.statusCode == 404) {
       throw BackupException('No backup stored for this account.');
     }
@@ -157,11 +243,13 @@ class BackupService {
 
   Future<String> _auth(String path, String email, String password) async {
     _requireConfigured();
-    final response = await http.post(
-      _uri(path),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email.trim(), 'password': password}),
-    );
+    final response = await _request(
+        (client) => client.post(
+              _uri(path),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'email': email.trim(), 'password': password}),
+            ),
+        const Duration(minutes: 2));
     if (response.statusCode != 200) {
       throw BackupException(_errorMessage(response));
     }

@@ -12,6 +12,7 @@ import '../services/ble_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ble_status_badge.dart';
 import '../widgets/pressure_gauge.dart';
+import '../widgets/press_timer_dialog.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -118,25 +119,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _addManualEvent(BuildContext context) async {
+    final profileId = ref.read(userSettingsProvider).activeProfileId;
+    final timing = await showDialog<PressTiming>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PressTimerDialog(),
+    );
+    if (timing == null || !mounted) return;
     const uuid = Uuid();
-    final now = DateTime.now();
     final event = PainEvent(
       id: uuid.v4(),
-      profileId: ref.read(userSettingsProvider).activeProfileId,
-      startTime: now.subtract(const Duration(seconds: 5)),
-      endTime: now,
-      durationMs: 5000,
-      meanForce: 0.4,
-      peakForce: 0.6,
-      rawSamples: List.generate(
-          250, (i) => (400 * (0.6 + 0.3 * (i / 250))).round()),
+      profileId: profileId,
+      startTime: timing.startedAt,
+      endTime: timing.startedAt.add(timing.duration),
+      durationMs: timing.duration.inMilliseconds,
+      meanForce: 0,
+      peakForce: 0,
       fromDevice: false,
     );
-    await ref.read(eventsProvider.notifier).addEvent(event);
+    try {
+      await ref.read(eventsProvider.notifier).addEvent(event);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save the recording. Try again.')),
+        );
+      }
+      return;
+    }
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Manual event added'), duration: Duration(seconds: 2)),
+        SnackBar(content: Text('Recorded ${event.formattedDuration}'), duration: const Duration(seconds: 2)),
       );
     }
   }
@@ -401,7 +415,7 @@ class _SummaryCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           color: color)),
                   if (latest != null)
-                    Text(latest!.peakForcePercent,
+                    Text(latest!.hasPressureData ? latest!.peakForcePercent : latest!.formattedDuration,
                         style: TextStyle(
                             fontSize: large ? 14 : 12, color: Colors.grey)),
                 ],

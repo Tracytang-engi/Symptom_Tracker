@@ -16,6 +16,7 @@ class StatsScreen extends ConsumerWidget {
     final todayEvents = ref.watch(todayEventsProvider);      // 今日事件
 
     final primary = Theme.of(context).colorScheme.primary;
+    final measured = last7.where((e) => e.hasPressureData).toList();
     final maxCount = weeklyCounts.map((d) => d.count).fold(1, (a, b) => a > b ? a : b);  // .fold = 累进计算最大值
 
     // 24 小时按时段统计（每 6 小时一段）
@@ -44,10 +45,10 @@ class StatsScreen extends ConsumerWidget {
             const SizedBox(height: 12),
 
             // 平均峰值
-            if (last7.isNotEmpty) ...[
+            if (measured.isNotEmpty) ...[
               _StatCard(
                 label: 'Avg Peak (7d)',
-                value: '${(last7.map((e) => e.peakForce).reduce((a, b) => a + b) / last7.length * 100).round()}%',  // reduce 累加求平均
+                value: '${(measured.map((e) => e.peakForce).reduce((a, b) => a + b) / measured.length * 100).round()}%',
                 unit: 'peak force',
                 color: primary,
               ),

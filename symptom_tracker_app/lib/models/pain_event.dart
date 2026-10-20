@@ -134,12 +134,14 @@ class PainEvent {
 
   String get formattedDuration {
     final s = durationMs ~/ 1000;
-    if (s < 60) return '${s}s';
+    if (s < 60) return '${(durationMs / 1000).toStringAsFixed(1)}s';
     return '${s ~/ 60}m ${s % 60}s';
   }
 
-  String get peakForcePercent => '${(peakForce * 100).round()}%';
-  String get meanForcePercent => '${(meanForce * 100).round()}%';
+  bool get hasPressureData => fromDevice;
+
+  String get peakForcePercent => hasPressureData ? '${(peakForce * 100).round()}%' : 'Not measured';
+  String get meanForcePercent => hasPressureData ? '${(meanForce * 100).round()}%' : 'Not measured';
 
   bool get isSameDay {
     final now = DateTime.now();

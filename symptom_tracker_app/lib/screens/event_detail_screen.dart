@@ -75,6 +75,9 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
             Text('Duration: ${_event.formattedDuration}',
                 style: const TextStyle(color: Colors.grey, fontSize: 13)),
             const SizedBox(height: 16),
+            if (!_event.hasPressureData)
+              const Text('Phone press duration only. Pressure was not measured.'),
+            if (_event.hasPressureData) ...[
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -116,6 +119,7 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            ],
             if (userSettings.multiProfileEnabled)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
