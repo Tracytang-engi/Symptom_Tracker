@@ -234,8 +234,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Uploads are scheduled after 1 and 2 minutes. '
-                      'Slow requests can take up to about 5 minutes in total. '
+                      'Uploads once when the server is ready. If the initial check or upload fails, '
+                      'automatically waits for the server and makes two recovery uploads. '
                       'Keep the app open and the phone unlocked.',
                       style: TextStyle(color: Colors.grey),
                     ),
@@ -282,8 +282,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Uploads are scheduled after 1 and 2 minutes. '
-            'Slow requests can take up to about 5 minutes in total.',
+            'Backup starts automatically when the server is ready. '
+            'Failed checks or uploads trigger automatic recovery. This may take several minutes.',
           ),
           const SizedBox(height: 8),
           const Text(

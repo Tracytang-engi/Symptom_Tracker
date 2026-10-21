@@ -36,6 +36,8 @@ void main() {
     'success',
     'retry',
     'first-only',
+    'cold-start',
+    'cold-timeout',
     'unauthorized',
     'server-error',
     'timeout',
@@ -47,15 +49,24 @@ void main() {
       final clients = <TrackingClient>[];
       final payloads = <String>[];
       var uploads = 0;
+      var healthChecks = 0;
       final service = BackupService(
         TestStorage(),
-        firstUploadAt: const Duration(milliseconds: 10),
-        secondUploadAt: const Duration(milliseconds: 60),
+        wakeTimeout: const Duration(milliseconds: 100),
+        healthTimeout: const Duration(milliseconds: 20),
+        retryDelay: const Duration(milliseconds: 1),
         firstTimeout: const Duration(milliseconds: 20),
         secondTimeout: const Duration(milliseconds: 20),
         clientFactory: () {
           final client = TrackingClient((request) async {
             if (request.url.path == '/health') {
+              healthChecks++;
+              if (scenario == 'cold-timeout' && healthChecks == 1) {
+                return Completer<http.Response>().future;
+              }
+              if (scenario == 'cold-start' && healthChecks <= 2) {
+                return http.Response('{}', 503);
+              }
               return http.Response('{"ok":true}', 200);
             }
             expect(request.method, 'PUT');
@@ -70,7 +81,7 @@ void main() {
             }
             if (scenario == 'server-error' ||
                 (scenario == 'retry' && uploads == 1) ||
-                (scenario == 'first-only' && uploads == 2)) {
+                (scenario == 'first-only' && uploads != 2)) {
               return http.Response('{}', 503);
             }
             return http.Response('{"ok":true}', 200);
@@ -80,7 +91,8 @@ void main() {
         },
       );
       final operation = service.uploadAfterWake(onStep: steps.add);
-      if (['success', 'retry', 'first-only'].contains(scenario)) {
+      if (['success', 'retry', 'first-only', 'cold-start', 'cold-timeout']
+          .contains(scenario)) {
         await operation;
         expect(steps.last, startsWith('Backup saved'));
       } else {
@@ -96,11 +108,18 @@ void main() {
             throwsA(isA<BackupException>()
                 .having((e) => e.message, 'message', contains(reason))));
       }
-      expect(uploads, scenario == 'unauthorized' ? 1 : 2);
-      expect(steps.any((s) => s.contains('Uploading 1/2')), isTrue);
-      if (uploads == 2) {
-        expect(steps.any((s) => s.contains('Uploading 2/2')), isTrue);
-        expect(payloads[0], payloads[1]);
+      final expected =
+          ['success', 'unauthorized', 'too-large'].contains(scenario)
+              ? 1
+              : scenario.startsWith('cold-')
+                  ? 2
+                  : 3;
+      expect(uploads, expected);
+      if (scenario == 'success') expect(healthChecks, 1);
+      if (scenario == 'cold-start') expect(healthChecks, 3);
+      if (uploads > 1) {
+        expect(steps.any((s) => s.contains('Uploading recovery 2/2')), isTrue);
+        expect(payloads.toSet().length, 1);
       }
       expect(jsonDecode(payloads.first)['events'], isEmpty);
       expect(clients.every((client) => client.closed), isTrue);
@@ -113,4 +132,28 @@ void main() {
         clientFactory: () => throw StateError('Network not expected'));
     await expectLater(service.upload(), throwsA(isA<BackupException>()));
   });
+
+  for (final hanging in [false, true]) {
+    test('Unavailable server stops without uploading (hanging: $hanging)',
+        () async {
+      final clients = <TrackingClient>[];
+      final service = BackupService(TestStorage(),
+          wakeTimeout: const Duration(milliseconds: 30),
+          healthTimeout: const Duration(milliseconds: 10),
+          retryDelay: const Duration(milliseconds: 1), clientFactory: () {
+        final client = TrackingClient((request) async {
+          expect(request.url.path, '/health');
+          if (hanging) return Completer<http.Response>().future;
+          return http.Response('<html>Starting...</html>', 200);
+        });
+        clients.add(client);
+        return client;
+      });
+      await expectLater(
+          service.upload(),
+          throwsA(isA<BackupException>().having(
+              (e) => e.message, 'message', contains('did not become ready'))));
+      expect(clients.every((client) => client.closed), isTrue);
+    });
+  }
 }

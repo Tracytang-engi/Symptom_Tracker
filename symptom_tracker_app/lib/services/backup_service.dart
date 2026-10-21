@@ -25,8 +25,9 @@ enum _PutResult { ok, retry, fatal }
 class BackupService {
   final StorageService storage;
   final http.Client Function() _clientFactory;
-  final Duration firstUploadAt;
-  final Duration secondUploadAt;
+  final Duration wakeTimeout;
+  final Duration healthTimeout;
+  final Duration retryDelay;
   final Duration firstTimeout;
   final Duration secondTimeout;
   String _lastUploadError = 'The server did not confirm the backup.';
@@ -34,8 +35,9 @@ class BackupService {
   BackupService(
     this.storage, {
     http.Client Function()? clientFactory,
-    this.firstUploadAt = const Duration(minutes: 1),
-    this.secondUploadAt = const Duration(minutes: 2),
+    this.wakeTimeout = const Duration(minutes: 2),
+    this.healthTimeout = const Duration(seconds: 15),
+    this.retryDelay = const Duration(seconds: 2),
     this.firstTimeout = const Duration(seconds: 50),
     this.secondTimeout = const Duration(minutes: 3),
   }) : _clientFactory = clientFactory ?? http.Client.new;
@@ -94,7 +96,7 @@ class BackupService {
     await uploadAfterWake();
   }
 
-  /// Wakes a sleeping free instance, then uploads at 1 minute and again at 2 minutes.
+  /// Uploads once when ready; failed checks/uploads enter wake-and-retry recovery.
   Future<void> uploadAfterWake({void Function(String step)? onStep}) async {
     _requireConfigured();
     final token = storage.accountToken;
@@ -105,71 +107,90 @@ class BackupService {
     onStep?.call('Preparing the backup…');
     final body =
         jsonEncode(await _buildPayload().timeout(const Duration(seconds: 30)));
-    final started = Stopwatch()..start();
-    var wakeStatus = 'Waking the server';
-    unawaited(_wake().then((status) => wakeStatus = status));
-
-    await _waitUntil(
-        started, firstUploadAt, onStep, () => '$wakeStatus. Upload 1/2');
-    final first =
-        await _uploadWithProgress(body, token, 1, firstTimeout, onStep);
-    if (first == _PutResult.fatal) {
-      throw BackupException('Login expired. Enter your password again.');
+    onStep?.call(
+        'Checking the server. Backup will start automatically when ready.');
+    if (await _wake(healthTimeout)) {
+      final result = await _uploadWithProgress(
+          body, token, 'backup', firstTimeout, onStep);
+      if (result == _PutResult.ok) {
+        onStep?.call('Backup saved. Server confirmed receipt.');
+        return;
+      }
+      if (result == _PutResult.fatal) throw BackupException(_lastUploadError);
+      onStep?.call(
+          'Upload failed: $_lastUploadError Preparing automatic recovery.');
     }
 
-    await _waitUntil(
-        started,
-        secondUploadAt,
-        onStep,
-        () => first == _PutResult.ok
-            ? 'Backup saved on attempt 1. Scheduled upload 2/2'
-            : 'Attempt 1 failed: $_lastUploadError Upload 2/2');
-    final second =
-        await _uploadWithProgress(body, token, 2, secondTimeout, onStep);
+    await _waitForServer(onStep);
+    final first = await _uploadWithProgress(
+        body, token, 'recovery 1/2', secondTimeout, onStep);
+    if (first == _PutResult.fatal) {
+      throw BackupException(_lastUploadError);
+    }
+    if (first != _PutResult.ok) await _waitForServer(onStep);
+    await Future<void>.delayed(retryDelay);
+    final second = await _uploadWithProgress(
+        body, token, 'recovery 2/2', secondTimeout, onStep);
     if (second == _PutResult.ok) {
       onStep?.call('Backup saved. Server confirmed receipt.');
       return;
     }
     if (first == _PutResult.ok) {
       onStep?.call(
-          'Backup saved on attempt 1. The second upload was not confirmed.');
+          'Backup saved during recovery. The second upload was not confirmed.');
       return;
     }
     if (second == _PutResult.fatal) {
-      throw BackupException('Login expired. Enter your password again.');
+      throw BackupException(_lastUploadError);
     }
     throw BackupException(
-        'Backup failed after 2 attempts. $_lastUploadError Your local records are unchanged.');
+        'Backup failed after automatic recovery. $_lastUploadError Your local records are unchanged.');
   }
 
-  Future<String> _wake() async {
+  Future<bool> _wake(Duration timeout) async {
     try {
-      final response = await _request(
-          (client) => client.get(_uri('/health')), const Duration(seconds: 30));
-      return response.statusCode == 200
-          ? 'Server is awake'
-          : 'Wake-up returned HTTP ${response.statusCode}';
+      final response =
+          await _request((client) => client.get(_uri('/health')), timeout);
+      if (response.statusCode != 200) return false;
+      final decoded = jsonDecode(response.body);
+      return decoded is Map && decoded['ok'] == true;
     } catch (_) {
-      return 'Wake-up not confirmed; upload will still be attempted';
+      return false;
     }
   }
 
-  Future<void> _waitUntil(Stopwatch started, Duration mark,
-      void Function(String)? onStep, String Function() label) async {
-    while (started.elapsed < mark) {
-      final left = mark - started.elapsed;
-      onStep?.call('${label()} in ${(left.inMilliseconds / 1000).ceil()} s.');
-      await Future<void>.delayed(left < const Duration(seconds: 1)
-          ? left
-          : const Duration(seconds: 1));
+  Future<void> _waitForServer(void Function(String)? onStep) async {
+    final watch = Stopwatch()..start();
+    void report() =>
+        onStep?.call('Waiting for the server - ${watch.elapsed.inSeconds} s. '
+            'Backup will start automatically when ready. Keep this app open.');
+    report();
+    final ticker = Timer.periodic(const Duration(seconds: 1), (_) => report());
+    try {
+      while (watch.elapsed < wakeTimeout) {
+        final remaining = wakeTimeout - watch.elapsed;
+        if (await _wake(remaining < healthTimeout ? remaining : healthTimeout)) {
+          return;
+        }
+        final delay = wakeTimeout - watch.elapsed;
+        if (delay > Duration.zero) {
+          await Future<void>.delayed(delay < retryDelay ? delay : retryDelay);
+        }
+      }
+      throw BackupException(
+          'Server did not become ready in time. Check your connection and try again. '
+          'Your local records are unchanged.');
+    } finally {
+      ticker.cancel();
+      watch.stop();
     }
   }
 
-  Future<_PutResult> _uploadWithProgress(String body, String token, int attempt,
-      Duration timeout, void Function(String)? onStep) async {
+  Future<_PutResult> _uploadWithProgress(String body, String token,
+      String attempt, Duration timeout, void Function(String)? onStep) async {
     final watch = Stopwatch()..start();
     void report() => onStep?.call(
-        'Uploading $attempt/2 - ${watch.elapsed.inSeconds} s elapsed '
+        'Uploading $attempt - ${watch.elapsed.inSeconds} s elapsed '
         '(timeout ${timeout.inSeconds} s). Waiting for server confirmation.');
     report();
     final ticker = Timer.periodic(const Duration(seconds: 1), (_) => report());
@@ -194,12 +215,20 @@ class BackupService {
                 body: body,
               ),
           timeout);
-      if (response.statusCode == 401) return _PutResult.fatal;
+      if (response.statusCode == 401) {
+        _lastUploadError = 'Login expired. Enter your password again.';
+        return _PutResult.fatal;
+      }
       if (response.statusCode != 200) {
         _lastUploadError = response.statusCode == 413
             ? 'Backup is too large for the server.'
             : 'Server returned HTTP ${response.statusCode}.';
-        return _PutResult.retry;
+        return response.statusCode >= 400 &&
+                response.statusCode < 500 &&
+                response.statusCode != 408 &&
+                response.statusCode != 429
+            ? _PutResult.fatal
+            : _PutResult.retry;
       }
       final decoded = jsonDecode(response.body);
       if (decoded is Map && decoded['ok'] == true) return _PutResult.ok;
