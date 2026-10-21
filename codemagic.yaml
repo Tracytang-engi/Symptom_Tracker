@@ -74,6 +74,20 @@ workflows:
         script: |
           set -euo pipefail
           plutil -lint build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/PrivacyInfo.xcprivacy
+          python3 - <<'PY'
+          import pathlib
+          import plistlib
+          app = pathlib.Path('build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app')
+          with (app / 'Info.plist').open('rb') as source:
+              info = plistlib.load(source)
+          for key in ('NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription'):
+              if not info.get(key, '').strip():
+                  raise SystemExit(f'Missing location purpose string: {key}')
+          minimum = tuple(int(part) for part in info.get('MinimumOSVersion', '0.0').split('.'))
+          if minimum < (15, 0):
+              raise SystemExit('The archived app must target iOS 15.0 or later.')
+          print('Archived location purpose strings and minimum iOS version verified.')
+          PY
       - name: Prepare IPA for publishing
         script: |
           set -euo pipefail

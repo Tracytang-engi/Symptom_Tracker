@@ -67,7 +67,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Location is included in SOS emergency alerts so helpers can find you.</string>
+	<string>Your location is used when you activate SOS to add your coordinates to a text message draft for your chosen contact. You must send the message yourself.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Your location is used when you activate SOS to add your coordinates to a text message draft for your chosen contact. You must send the message yourself. The app does not continuously track your location.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth is used to connect to your Symptom Tracker device.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
