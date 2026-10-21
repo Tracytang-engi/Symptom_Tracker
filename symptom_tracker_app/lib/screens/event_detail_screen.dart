@@ -9,6 +9,7 @@ import '../providers/events_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/audio_service.dart';
 import '../widgets/pressure_curve_chart.dart';
+import '../widgets/duration_chart.dart';
 import '../widgets/tag_selector.dart';
 
 // EventDetailScreen：单次事件详情页
@@ -75,8 +76,13 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
             Text('Duration: ${_event.formattedDuration}',
                 style: const TextStyle(color: Colors.grey, fontSize: 13)),
             const SizedBox(height: 16),
-            if (!_event.hasPressureData)
-              const Text('Phone press duration only. Pressure was not measured.'),
+            if (!_event.hasPressureData) ...[
+              _Section(
+                title: 'Press Duration',
+                child: DurationChart(durationMs: _event.durationMs),
+              ),
+              const SizedBox(height: 16),
+            ],
             if (_event.hasPressureData) ...[
             Card(
               child: Padding(
